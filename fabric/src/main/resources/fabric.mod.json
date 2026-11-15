@@ -21,6 +21,9 @@
       "dev.tore.fluidphysics.fabric.FluidPhysicsFabricClient"
     ]
   },
+  "mixins": [
+    "fluidphysics.mixins.json"
+  ],
   "depends": {
     "fabricloader": ">=${fabric_loader_version}",
     "fabric-api": "*",

@@ -1,0 +1,6 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "fluidphysics:item/physics_water_bucket"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "": [
+      { "model": "fluidphysics:block/physics_sand" },
+      { "model": "fluidphysics:block/physics_sand", "y": 90 },
+      { "model": "fluidphysics:block/physics_sand", "y": 180 },
+      { "model": "fluidphysics:block/physics_sand", "y": 270 }
+    ]
+  }
+}

@@ -7,17 +7,28 @@ import dev.tore.fluidphysics.network.FluidClearPayload;
 import dev.tore.fluidphysics.network.FluidCondensePayload;
 import dev.tore.fluidphysics.network.FluidImpulsePayload;
 import dev.tore.fluidphysics.network.FluidSpawnPayload;
+import dev.tore.fluidphysics.registry.ModRegistry;
 import dev.tore.fluidphysics.server.ServerSimulations;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
 
 public final class FluidPhysicsFabric implements ModInitializer {
     @Override
     public void onInitialize() {
         FluidPhysicsCommon.init();
+
+        ModRegistry.registerBlocks((id, block) -> Registry.register(BuiltInRegistries.BLOCK, id, block));
+        ModRegistry.registerItems((id, item) -> Registry.register(BuiltInRegistries.ITEM, id, item));
+        ItemGroupEvents.modifyEntriesEvent(ModRegistry.TOOLS_TAB)
+                .register(entries -> ModRegistry.addToCreativeTab(ModRegistry.TOOLS_TAB, entries::accept));
+        ItemGroupEvents.modifyEntriesEvent(ModRegistry.NATURAL_TAB)
+                .register(entries -> ModRegistry.addToCreativeTab(ModRegistry.NATURAL_TAB, entries::accept));
 
         // Clientbound payload types must be known on both sides; the client entry point adds the receivers.
         PayloadTypeRegistry.playS2C().register(FluidSpawnPayload.TYPE, FluidSpawnPayload.STREAM_CODEC);

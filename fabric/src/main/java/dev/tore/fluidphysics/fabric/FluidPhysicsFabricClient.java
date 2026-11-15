@@ -3,6 +3,7 @@ package dev.tore.fluidphysics.fabric;
 
 import dev.tore.fluidphysics.client.ClientSimulation;
 import dev.tore.fluidphysics.client.render.ParticleBatchRenderer;
+import dev.tore.fluidphysics.interaction.Simulations;
 import dev.tore.fluidphysics.network.FluidClearPayload;
 import dev.tore.fluidphysics.network.FluidCondensePayload;
 import dev.tore.fluidphysics.network.FluidImpulsePayload;
@@ -20,6 +21,8 @@ import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
 public final class FluidPhysicsFabricClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
+        Simulations.setClientLookup(ClientSimulation::lookup);
+
         // Fabric calls these receivers on the render thread, where the client simulation also ticks.
         ClientPlayNetworking.registerGlobalReceiver(FluidSpawnPayload.TYPE,
                 (payload, context) -> ClientSimulation.onSpawn(payload));

@@ -11,6 +11,9 @@ authors = "${mod_author}"
 displayURL = "${mod_homepage}"
 description = '''${mod_description}'''
 
+[[mixins]]
+config = "fluidphysics.mixins.json"
+
 [[dependencies.${mod_id}]]
 modId = "neoforge"
 type = "required"

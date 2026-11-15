@@ -30,6 +30,12 @@ public final class MaterialProperties {
      * which lets them pile up at an angle of repose.
      */
     static final boolean[] GRANULAR = new boolean[MATERIAL_COUNT];
+    /**
+     * Which vanilla fluid source blocks the material rests on as if they were solid, as a
+     * {@link ChunkVoxelCache#getMask(int, int, int, int) collision class}: water on water sources, lava on lava
+     * sources. A full vanilla block of the same fluid is incompressible, so particles must not sink into it.
+     */
+    static final byte[] COLLISION_CLASS = new byte[MATERIAL_COUNT];
     /** Lower-case name, as used by commands. */
     private static final String[] NAMES = new String[MATERIAL_COUNT];
 
@@ -38,6 +44,8 @@ public final class MaterialProperties {
         set(MATERIAL_LAVA, "lava", -9.81f, 0.45f, 0.08f, 0.25f, 0.00f, false);
         set(MATERIAL_SLIME, "slime", -9.81f, 0.35f, 0.30f, 0.60f, 0.85f, false);
         set(MATERIAL_SAND, "sand", -12.0f, 0.15f, 0.00f, 0.75f, 0.05f, true);
+        COLLISION_CLASS[MATERIAL_WATER] = ChunkVoxelCache.CLASS_WATER;
+        COLLISION_CLASS[MATERIAL_LAVA] = ChunkVoxelCache.CLASS_LAVA;
     }
 
     private MaterialProperties() {
@@ -60,6 +68,11 @@ public final class MaterialProperties {
 
     public static boolean isGranular(byte mat) {
         return GRANULAR[mat];
+    }
+
+    /** The collision class of a valid material id, see {@link #COLLISION_CLASS}. */
+    public static int collisionClass(byte mat) {
+        return COLLISION_CLASS[mat];
     }
 
     /** Whether {@code mat} is a known material id; ids from the network must be checked before use. */

@@ -184,6 +184,45 @@ class PbfSolverTest {
     }
 
     @Test
+    void waterRestsOnAVanillaWaterSourceWhileSandSinksIntoIt() {
+        // Block (0, 0, 0) holds a vanilla water source on a stone floor at y = -1.
+        ParticleSoA particles = new ParticleSoA(16);
+        ChunkVoxelCache world = new ChunkVoxelCache();
+        world.putMask(0, -1, 0, ChunkVoxelCache.FULL);
+        world.putTag(0, 0, 0, ChunkVoxelCache.TAG_WATER | ChunkVoxelCache.TAG_SOURCE);
+        particles.add(0.3f, 3.0f, 0.5f, 0f, 0f, 0f, MATERIAL_WATER);
+        particles.add(0.7f, 3.0f, 0.5f, 0f, 0f, 0f, MATERIAL_SAND);
+        PbfSolver solver = new PbfSolver(particles, world);
+
+        for (int i = 0; i < 100; i++) {
+            solver.step();
+        }
+
+        assertEquals(1.0f, particles.posY[0], 0.01f, "water should rest on top of the water source");
+        assertEquals(0.0f, particles.posY[1], 0.01f, "sand should sink to the floor under the water source");
+    }
+
+    @Test
+    void lavaRestsOnLavaSourcesButNotOnFlowingLava() {
+        ParticleSoA particles = new ParticleSoA(16);
+        ChunkVoxelCache world = new ChunkVoxelCache();
+        world.putMask(0, -1, 0, ChunkVoxelCache.FULL);
+        world.putMask(2, -1, 0, ChunkVoxelCache.FULL);
+        world.putTag(0, 0, 0, ChunkVoxelCache.TAG_LAVA | ChunkVoxelCache.TAG_SOURCE);
+        world.putTag(2, 0, 0, ChunkVoxelCache.TAG_LAVA);
+        particles.add(0.5f, 2.0f, 0.5f, 0f, 0f, 0f, ParticleSoA.MATERIAL_LAVA);
+        particles.add(2.5f, 2.0f, 0.5f, 0f, 0f, 0f, ParticleSoA.MATERIAL_LAVA);
+        PbfSolver solver = new PbfSolver(particles, world);
+
+        for (int i = 0; i < 100; i++) {
+            solver.step();
+        }
+
+        assertEquals(1.0f, particles.posY[0], 0.01f, "lava should rest on the lava source");
+        assertEquals(0.0f, particles.posY[1], 0.01f, "flowing lava does not hold lava up");
+    }
+
+    @Test
     void fastParticleDoesNotTunnelThroughAThinFloor() {
         // One sub-voxel thick floor (like a trapdoor), hit at the speed limit.
         ParticleSoA particles = new ParticleSoA(16);

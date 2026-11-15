@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.tore.fluidphysics.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "BoatMixin",
+    "BucketItemMixin",
+    "ExplosionMixin",
+    "FallingBlockEntityMixin",
+    "LevelMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

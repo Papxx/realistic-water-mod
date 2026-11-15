@@ -9,6 +9,8 @@ import dev.tore.fluidphysics.network.FluidSpawnPayload;
 import dev.tore.fluidphysics.physics.FluidSimulation;
 import dev.tore.fluidphysics.physics.ParticleSoA;
 import dev.tore.fluidphysics.physics.WorkerPool;
+import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongArrayList;
 import it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -27,6 +29,24 @@ public final class ServerSimulations {
 
     private static final Reference2ObjectOpenHashMap<ServerLevel, FluidSimulation> SIMULATIONS =
             new Reference2ObjectOpenHashMap<>();
+    private static final Reference2ObjectOpenHashMap<ServerLevel, ServerInteractions> INTERACTIONS =
+            new Reference2ObjectOpenHashMap<>();
+    /** Particles removed by {@link #removeMarked}, per material: block to count, and the blocks in order. */
+    private static final Long2IntOpenHashMap[] REMOVED = new Long2IntOpenHashMap[ParticleSoA.MATERIAL_COUNT];
+    private static final LongArrayList[] REMOVED_BLOCKS = new LongArrayList[ParticleSoA.MATERIAL_COUNT];
+    private static final FluidSimulation.RemovalSink REMOVAL_SINK = (x, y, z, material) -> {
+        long key = BlockPos.asLong(x, y, z);
+        if (REMOVED[material].addTo(key, 1) == 0) {
+            REMOVED_BLOCKS[material].add(key);
+        }
+    };
+
+    static {
+        for (int m = 0; m < ParticleSoA.MATERIAL_COUNT; m++) {
+            REMOVED[m] = new Long2IntOpenHashMap();
+            REMOVED_BLOCKS[m] = new LongArrayList();
+        }
+    }
     /** Shared by all levels: they tick one after another on the server thread. */
     private static WorkerPool pool;
     private static int limit = DEFAULT_LIMIT;
@@ -43,6 +63,7 @@ public final class ServerSimulations {
             }
             simulation = new FluidSimulation(pool, limit);
             SIMULATIONS.put(level, simulation);
+            INTERACTIONS.put(level, new ServerInteractions(level));
         }
         return simulation;
     }
@@ -67,12 +88,20 @@ public final class ServerSimulations {
         // /tick freeze stops the level, so it stops the particles too.
         if (simulation != null && level.tickRateManager().runsNormally()) {
             simulation.tick(level);
+            INTERACTIONS.get(level).tick(simulation);
         }
+    }
+
+    /** Lava particles cooling into stone that has not formed yet, in {@code level}. */
+    public static int stoneForming(ServerLevel level) {
+        ServerInteractions interactions = INTERACTIONS.get(level);
+        return interactions == null ? 0 : interactions.stoneForming();
     }
 
     /** Drops all simulations and stops the solver threads, so the next server (another world) starts fresh. */
     public static void onServerStopped() {
         SIMULATIONS.clear();
+        INTERACTIONS.clear();
         limit = DEFAULT_LIMIT;
         if (pool != null) {
             pool.close();
@@ -154,6 +183,33 @@ public final class ServerSimulations {
     }
 
     /**
+     * Removes the particles of {@code level} picked with {@link FluidSimulation#mark} and friends, and tells the clients
+     * that see them: one condense event per block and material, so each client removes the same number of particles
+     * from the same blocks.
+     *
+     * @return the number of particles removed
+     */
+    public static int removeMarked(ServerLevel level, FluidSimulation simulation) {
+        int removed = simulation.removeMarked(REMOVAL_SINK);
+        for (byte m = 0; m < ParticleSoA.MATERIAL_COUNT; m++) {
+            LongArrayList blocks = REMOVED_BLOCKS[m];
+            for (int b = 0; b < blocks.size(); b++) {
+                long key = blocks.getLong(b);
+                int count = REMOVED[m].get(key);
+                while (count > 0) {
+                    int part = Math.min(count, Short.MAX_VALUE);
+                    FluidNetworking.sendToTracking(level, BlockPos.getX(key), BlockPos.getZ(key),
+                            new FluidCondensePayload(key, m, (short) part));
+                    count -= part;
+                }
+            }
+            blocks.clear();
+            REMOVED[m].clear();
+        }
+        return removed;
+    }
+
+    /**
      * Removes all particles of {@code level} and tells every player in it.
      *
      * @return the number of server particles removed
@@ -161,6 +217,10 @@ public final class ServerSimulations {
     public static int clear(ServerLevel level) {
         FluidSimulation simulation = SIMULATIONS.get(level);
         int removed = simulation == null ? 0 : simulation.clear();
+        ServerInteractions interactions = INTERACTIONS.get(level);
+        if (interactions != null) {
+            interactions.clear();
+        }
         // Sent even if the server had none: clients may hold particles that drifted apart from the server's.
         FluidNetworking.sendToLevel(level, FluidClearPayload.INSTANCE);
         return removed;

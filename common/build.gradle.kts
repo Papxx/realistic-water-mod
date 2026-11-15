@@ -19,6 +19,8 @@ dependencies {
     // Vanilla Minecraft only: nothing loader-specific may leak into common code.
     minecraft("com.mojang:minecraft:${prop("minecraft_version")}")
     mappings(loom.officialMojangMappings())
+    // Mixin annotations only: Fabric Loader and NeoForge both ship Mixin at runtime.
+    compileOnly("net.fabricmc:sponge-mixin:${prop("mixin_version")}")
 
     testImplementation(platform("org.junit:junit-bom:${prop("junit_version")}"))
     testImplementation("org.junit.jupiter:junit-jupiter")

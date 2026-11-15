@@ -1,0 +1,8 @@
+{
+  "block.fluidphysics.physics_sand": "Crumbling Sand",
+  "item.fluidphysics.physics_water_bucket": "Physics Water Bucket",
+  "item.fluidphysics.physics_lava_bucket": "Physics Lava Bucket",
+  "item.fluidphysics.physics_slime_bucket": "Physics Slime Bucket",
+  "message.fluidphysics.limit_reached": "Particle limit reached",
+  "message.fluidphysics.too_far": "Too far from the other particles in this dimension"
+}

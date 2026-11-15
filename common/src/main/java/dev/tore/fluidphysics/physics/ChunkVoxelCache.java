@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.tore.fluidphysics.physics;
 
+import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.objects.Reference2LongOpenHashMap;
@@ -8,15 +9,24 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.AbstractCauldronBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.material.Fluid;
+import net.minecraft.world.level.material.FluidState;
+import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
  * Solid world geometry around the particles, one {@code long} per block: each of the 64 bits marks one
  * 0.25-block sub-voxel of the block's collision shape as solid (see {@link #subVoxelBit}).
+ *
+ * <p>Besides the shape, each block may carry a {@link #getTag tag}: whether it holds vanilla water or lava (and whether
+ * that is a source) and whether it is a cauldron. Interactions read the tags instead of the level, and the solver uses
+ * them for {@link #getMask(int, int, int, int) collision classes}: water particles rest on water source blocks and
+ * lava particles on lava source blocks as if those were solid.
  *
  * <p>The solver only calls {@link #getMask}, which never touches the level. The level is read on the main thread,
  * a whole chunk section (16 x 16 x 16 blocks) at a time, by {@link #ensureCached} before the solver runs and by
@@ -31,11 +41,36 @@ public final class ChunkVoxelCache {
     public static final long EMPTY = 0L;
     public static final long FULL = -1L;
 
+    /** {@link #getTag Tag} bit: the block holds vanilla water (source, flowing or waterlogged). */
+    public static final byte TAG_WATER = 1;
+    /** Tag bit: the block holds vanilla lava. */
+    public static final byte TAG_LAVA = 2;
+    /** Tag bit, together with {@link #TAG_WATER} or {@link #TAG_LAVA}: the fluid is a source. */
+    public static final byte TAG_SOURCE = 4;
+    /** Tag bit: the block is a cauldron (empty or filled). */
+    public static final byte TAG_CAULDRON = 8;
+
+    /** Collision class of particles that only collide with solid shapes (slime, sand). */
+    public static final int CLASS_SOLID = 0;
+    /** Collision class of water particles: water source blocks count as solid. Equal to {@link #TAG_WATER}. */
+    public static final int CLASS_WATER = TAG_WATER;
+    /** Collision class of lava particles: lava source blocks count as solid. Equal to {@link #TAG_LAVA}. */
+    public static final int CLASS_LAVA = TAG_LAVA;
+    /** Number of collision classes. */
+    public static final int CLASS_COUNT = 3;
+
     /** Overlap (in sub-voxel units) a collision box needs before a sub-voxel counts as solid. */
     private static final double OVERLAP_EPSILON = 1.0e-3;
 
     /** Packed block position ({@link BlockPos#asLong(int, int, int)}) to sub-voxel mask; absent means air. */
     private final Long2LongOpenHashMap masks = new Long2LongOpenHashMap();
+    /** Packed block position to {@link #getTag tag}; absent means 0. */
+    private final Long2ByteOpenHashMap tags = new Long2ByteOpenHashMap();
+    /**
+     * Blocks that read as air although the level still says otherwise, until the level reports a change there (see
+     * {@link #forceEmpty}).
+     */
+    private final LongOpenHashSet forcedEmpty = new LongOpenHashSet();
     /** Sections ({@link SectionPos#asLong(int, int, int)}) whose blocks are all in {@link #masks}. */
     private final LongOpenHashSet cachedSections = new LongOpenHashSet();
     /** Masks of block states whose collision shape does not depend on the position. */
@@ -46,6 +81,7 @@ public final class ChunkVoxelCache {
 
     public ChunkVoxelCache() {
         masks.defaultReturnValue(EMPTY);
+        tags.defaultReturnValue((byte) 0);
     }
 
     /** Bit index of sub-voxel ({@code sx}, {@code sy}, {@code sz}), each in 0..3. */
@@ -60,6 +96,38 @@ public final class ChunkVoxelCache {
     /** Sub-voxel mask of the block at world block coordinates; {@link #EMPTY} if air or unknown. */
     public long getMask(int x, int y, int z) {
         return masks.get(BlockPos.asLong(x, y, z));
+    }
+
+    /**
+     * Sub-voxel mask of the block as seen by particles of one collision class: {@link #FULL} for a source block of
+     * the class's own fluid ({@link #CLASS_WATER}, {@link #CLASS_LAVA}), the solid shape otherwise.
+     */
+    public long getMask(int x, int y, int z, int collisionClass) {
+        long key = BlockPos.asLong(x, y, z);
+        long mask = masks.get(key);
+        if (collisionClass != CLASS_SOLID && mask != FULL) {
+            int tag = tags.get(key);
+            if ((tag & TAG_SOURCE) != 0 && (tag & collisionClass) != 0) {
+                return FULL;
+            }
+        }
+        return mask;
+    }
+
+    /** {@link #TAG_WATER Tag bits} of the block at world block coordinates; 0 if none or unknown. */
+    public int getTag(int x, int y, int z) {
+        return tags.get(BlockPos.asLong(x, y, z));
+    }
+
+    /** Stores a tag directly (tests). 0 removes the entry. */
+    public void putTag(int x, int y, int z, int tag) {
+        version++;
+        long key = BlockPos.asLong(x, y, z);
+        if (tag == 0) {
+            tags.remove(key);
+        } else {
+            tags.put(key, (byte) tag);
+        }
     }
 
     /** Changes whenever a stored mask may have changed (blocks updated, sections cached or dropped). */
@@ -94,8 +162,23 @@ public final class ChunkVoxelCache {
     public void clear() {
         version++;
         masks.clear();
+        tags.clear();
+        forcedEmpty.clear();
         cachedSections.clear();
         stateMasks.clear();
+    }
+
+    /**
+     * Makes a block read as air until the level reports a change there, whatever the level says now. A client calls
+     * this when the server spawns particles in a block whose removal has not reached the client yet (the spawn event
+     * can overtake the block update), so the particles are not pushed out of a block that is already gone.
+     */
+    public void forceEmpty(int x, int y, int z) {
+        long key = BlockPos.asLong(x, y, z);
+        forcedEmpty.add(key);
+        if (masks.remove(key) != EMPTY) {
+            version++;
+        }
     }
 
     /**
@@ -164,9 +247,14 @@ public final class ChunkVoxelCache {
                     if (state.isAir()) {
                         continue;
                     }
+                    long key = BlockPos.asLong(baseX + x, baseY + y, baseZ + z);
                     long mask = maskOf(state, level, scratchPos.set(baseX + x, baseY + y, baseZ + z));
-                    if (mask != EMPTY) {
-                        masks.put(BlockPos.asLong(baseX + x, baseY + y, baseZ + z), mask);
+                    if (mask != EMPTY && !forcedEmpty.contains(key)) {
+                        masks.put(key, mask);
+                    }
+                    byte tag = computeTag(state);
+                    if (tag != 0) {
+                        tags.put(key, tag);
                     }
                 }
             }
@@ -174,15 +262,41 @@ public final class ChunkVoxelCache {
         return true;
     }
 
-    /** Re-reads one block after a block update, if its section is cached. Main thread only. */
-    public void onBlockChanged(Level level, BlockPos pos) {
+    /**
+     * Re-reads one block after a block update, if its section is cached. Main thread only.
+     *
+     * @return whether the block's mask or tag changed
+     */
+    public boolean onBlockChanged(Level level, BlockPos pos) {
+        long key = pos.asLong();
+        forcedEmpty.remove(key);
         long sectionKey = SectionPos.asLong(
                 SectionPos.blockToSectionCoord(pos.getX()),
                 SectionPos.blockToSectionCoord(pos.getY()),
                 SectionPos.blockToSectionCoord(pos.getZ()));
-        if (cachedSections.contains(sectionKey)) {
-            putMask(pos.getX(), pos.getY(), pos.getZ(), maskOf(level.getBlockState(pos), level, pos));
+        if (!cachedSections.contains(sectionKey)) {
+            return false;
         }
+        BlockState state = level.getBlockState(pos);
+        long mask = maskOf(state, level, pos);
+        byte tag = computeTag(state);
+        // Flowing water changes its level all the time without changing mask or tag; only real changes make the
+        // solvers drop their remembered masks.
+        if (mask == masks.get(key) && tag == tags.get(key)) {
+            return false;
+        }
+        version++;
+        if (mask == EMPTY) {
+            masks.remove(key);
+        } else {
+            masks.put(key, mask);
+        }
+        if (tag == 0) {
+            tags.remove(key);
+        } else {
+            tags.put(key, tag);
+        }
+        return true;
     }
 
     /** Drops one section, e.g. when its chunk unloads. */
@@ -197,7 +311,9 @@ public final class ChunkVoxelCache {
         for (int y = 0; y < 16; y++) {
             for (int z = 0; z < 16; z++) {
                 for (int x = 0; x < 16; x++) {
-                    masks.remove(BlockPos.asLong(baseX + x, baseY + y, baseZ + z));
+                    long key = BlockPos.asLong(baseX + x, baseY + y, baseZ + z);
+                    masks.remove(key);
+                    tags.remove(key);
                 }
             }
         }
@@ -213,6 +329,24 @@ public final class ChunkVoxelCache {
             stateMasks.put(state, mask);
         }
         return mask;
+    }
+
+    /** The {@link #TAG_WATER tag bits} of a block state. Does not depend on tags or the position. */
+    public static byte computeTag(BlockState state) {
+        int tag = state.getBlock() instanceof AbstractCauldronBlock ? TAG_CAULDRON : 0;
+        FluidState fluid = state.getFluidState();
+        if (!fluid.isEmpty()) {
+            Fluid type = fluid.getType();
+            if (type.isSame(Fluids.WATER)) {
+                tag |= TAG_WATER;
+            } else if (type.isSame(Fluids.LAVA)) {
+                tag |= TAG_LAVA;
+            }
+            if ((tag & (TAG_WATER | TAG_LAVA)) != 0 && fluid.isSource()) {
+                tag |= TAG_SOURCE;
+            }
+        }
+        return (byte) tag;
     }
 
     /**

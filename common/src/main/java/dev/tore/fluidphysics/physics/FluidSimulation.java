@@ -42,6 +42,16 @@ public final class FluidSimulation {
     private ParticleSoA particles;
     private PbfSolver solver;
     private int limit;
+    /** Particles picked for {@link #removeMarked}, by particle index; all 0 between removals. */
+    private boolean[] marks;
+    /** Scratch for {@link #markNearest}: candidate indices and their squared distances. */
+    private int[] candidates;
+    private float[] candidateDistances;
+
+    /** Bumped whenever particles move, appear or disappear; {@link #occupancy()} is rebuilt when it changed. */
+    private int generation;
+    private BlockOccupancy occupancy;
+    private int occupancyGeneration = -1;
 
     private final long[] stepNanos = new long[STATS_WINDOW];
     private int stepCursor;
@@ -124,7 +134,17 @@ public final class FluidSimulation {
             voxels.clear();
             particles.setOrigin(blockX, blockY, blockZ);
         }
-        return particles.spawnBlock(blockX, blockY, blockZ, material, n, finite(vx), finite(vy), finite(vz));
+        int spawned = particles.spawnBlock(blockX, blockY, blockZ, material, n, finite(vx), finite(vy), finite(vz));
+        particlesChanged();
+        return spawned;
+    }
+
+    /** Call after particles were added or removed. */
+    private void particlesChanged() {
+        generation++;
+        if (solver != null) {
+            solver.invalidateBlockCaches();
+        }
     }
 
     private static float finite(float v) {
@@ -148,6 +168,9 @@ public final class FluidSimulation {
         }
         particles = larger;
         solver = new PbfSolver(larger, voxels, pool);
+        marks = new boolean[newCapacity];
+        candidates = new int[newCapacity];
+        candidateDistances = new float[newCapacity];
     }
 
     /**
@@ -193,6 +216,9 @@ public final class FluidSimulation {
             p.sleepTicks[i] = 0;
             pushed++;
         }
+        if (pushed > 0) {
+            generation++;
+        }
         return pushed;
     }
 
@@ -215,7 +241,227 @@ public final class FluidSimulation {
         if (removed < maxCount) {
             removed += removeAround(p, rx, ry, rz, 1, material, maxCount - removed);
         }
+        if (removed > 0) {
+            particlesChanged();
+        }
         return removed;
+    }
+
+    /** Receives each particle {@link #removeMarked} removes: its block and material. */
+    @FunctionalInterface
+    public interface RemovalSink {
+        void removed(int blockX, int blockY, int blockZ, byte material);
+    }
+
+    /** Picks particle {@code i} for the next {@link #removeMarked}. */
+    public void mark(int i) {
+        marks[i] = true;
+    }
+
+    public boolean isMarked(int i) {
+        return marks != null && marks[i];
+    }
+
+    /**
+     * Picks the {@code count} particles of {@code material} closest to a world position for the next
+     * {@link #removeMarked}, among those within {@code maxDistance} that are not picked yet.
+     *
+     * @param restingOnly only consider particles that rest (see {@link #RESTING_TICKS})
+     * @param allOrNothing pick nothing unless {@code count} particles qualify
+     * @return the number of particles picked
+     */
+    public int markNearest(double x, double y, double z, byte material, int count, float maxDistance,
+                           boolean restingOnly, boolean allOrNothing) {
+        ParticleSoA p = particles;
+        if (p == null || count <= 0) {
+            return 0;
+        }
+        float cx = (float) (x - p.originX);
+        float cy = (float) (y - p.originY);
+        float cz = (float) (z - p.originZ);
+        float max2 = maxDistance * maxDistance;
+        int found = 0;
+        for (int i = 0; i < p.activeCount; i++) {
+            if (p.material[i] != material || marks[i] || restingOnly && p.sleepTicks[i] <= RESTING_TICKS) {
+                continue;
+            }
+            float dx = p.posX[i] - cx;
+            float dy = p.posY[i] - cy;
+            float dz = p.posZ[i] - cz;
+            float d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 <= max2) {
+                candidates[found] = i;
+                candidateDistances[found] = d2;
+                found++;
+            }
+        }
+        if (found < count && allOrNothing) {
+            return 0;
+        }
+        int picked = Math.min(count, found);
+        if (picked < found) {
+            selectSmallest(picked, found);
+        }
+        for (int c = 0; c < picked; c++) {
+            marks[candidates[c]] = true;
+        }
+        return picked;
+    }
+
+    /**
+     * Picks up to {@code max} particles of {@code material} in one block for the next {@link #removeMarked}, among
+     * those not picked yet.
+     *
+     * @return the number of particles picked
+     */
+    public int markInBlock(int blockX, int blockY, int blockZ, byte material, int max) {
+        return markInBlock(blockX, blockY, blockZ, material, max, 1f);
+    }
+
+    /**
+     * Like {@link #markInBlock(int, int, int, byte, int)}, but only particles in the bottom {@code maxHeight} of the
+     * block (0..1).
+     */
+    public int markInBlock(int blockX, int blockY, int blockZ, byte material, int max, float maxHeight) {
+        ParticleSoA p = particles;
+        if (p == null || max <= 0) {
+            return 0;
+        }
+        int rx = blockX - p.originX;
+        int ry = blockY - p.originY;
+        int rz = blockZ - p.originZ;
+        float top = ry + maxHeight;
+        int picked = 0;
+        for (int i = 0; i < p.activeCount && picked < max; i++) {
+            if (p.material[i] == material && !marks[i]
+                    && (int) Math.floor(p.posX[i]) == rx
+                    && (int) Math.floor(p.posY[i]) == ry
+                    && (int) Math.floor(p.posZ[i]) == rz
+                    && p.posY[i] < top) {
+                marks[i] = true;
+                picked++;
+            }
+        }
+        return picked;
+    }
+
+    /** Particles of {@code material} within {@code maxDistance} of a world position. */
+    public int countNear(double x, double y, double z, byte material, float maxDistance) {
+        ParticleSoA p = particles;
+        if (p == null) {
+            return 0;
+        }
+        float cx = (float) (x - p.originX);
+        float cy = (float) (y - p.originY);
+        float cz = (float) (z - p.originZ);
+        float max2 = maxDistance * maxDistance;
+        int found = 0;
+        for (int i = 0; i < p.activeCount; i++) {
+            if (p.material[i] != material) {
+                continue;
+            }
+            float dx = p.posX[i] - cx;
+            float dy = p.posY[i] - cy;
+            float dz = p.posZ[i] - cz;
+            if (dx * dx + dy * dy + dz * dz <= max2) {
+                found++;
+            }
+        }
+        return found;
+    }
+
+    /**
+     * Reorders the first {@code n} candidates so the {@code k} with the smallest distances come first
+     * (quickselect, in place).
+     */
+    private void selectSmallest(int k, int n) {
+        int lo = 0;
+        int hi = n - 1;
+        while (lo < hi) {
+            float pivot = candidateDistances[(lo + hi) >>> 1];
+            int i = lo;
+            int j = hi;
+            while (i <= j) {
+                while (candidateDistances[i] < pivot) {
+                    i++;
+                }
+                while (candidateDistances[j] > pivot) {
+                    j--;
+                }
+                if (i <= j) {
+                    swapCandidates(i, j);
+                    i++;
+                    j--;
+                }
+            }
+            // Now [lo..j] <= pivot <= [i..hi]; continue in the part that holds index k - 1.
+            if (k - 1 <= j) {
+                hi = j;
+            } else if (k - 1 >= i) {
+                lo = i;
+            } else {
+                return;
+            }
+        }
+    }
+
+    private void swapCandidates(int a, int b) {
+        int index = candidates[a];
+        candidates[a] = candidates[b];
+        candidates[b] = index;
+        float d = candidateDistances[a];
+        candidateDistances[a] = candidateDistances[b];
+        candidateDistances[b] = d;
+    }
+
+    /**
+     * Removes every particle picked with {@link #mark} or {@link #markNearest} and reports each one to {@code sink}
+     * (may be null).
+     *
+     * @return the number of particles removed
+     */
+    public int removeMarked(RemovalSink sink) {
+        ParticleSoA p = particles;
+        if (p == null) {
+            return 0;
+        }
+        int removed = 0;
+        // Backwards: the particle remove() moves into slot i comes from the end, which was checked already.
+        for (int i = p.activeCount - 1; i >= 0; i--) {
+            if (!marks[i]) {
+                continue;
+            }
+            if (sink != null) {
+                sink.removed(p.originX + (int) Math.floor(p.posX[i]), p.originY + (int) Math.floor(p.posY[i]),
+                        p.originZ + (int) Math.floor(p.posZ[i]), p.material[i]);
+            }
+            p.remove(i);
+            marks[i] = false;
+            marks[p.activeCount] = false;
+            removed++;
+        }
+        if (removed > 0) {
+            particlesChanged();
+        }
+        return removed;
+    }
+
+    /**
+     * Particle counts per block for the current positions, rebuilt on first use after the particles changed. Null
+     * while no particles are allocated.
+     */
+    public BlockOccupancy occupancy() {
+        if (particles == null) {
+            return null;
+        }
+        if (occupancy == null) {
+            occupancy = new BlockOccupancy();
+        }
+        if (occupancyGeneration != generation) {
+            occupancy.build(particles, RESTING_TICKS);
+            occupancyGeneration = generation;
+        }
+        return occupancy;
     }
 
     /** Removes particles of {@code material} within {@code reach} blocks of origin-relative block (rx, ry, rz). */
@@ -244,6 +490,11 @@ public final class FluidSimulation {
         int removed = activeCount();
         particles = null;
         solver = null;
+        marks = null;
+        candidates = null;
+        candidateDistances = null;
+        occupancy = null;
+        generation++;
         voxels.clear();
         return removed;
     }
@@ -269,6 +520,7 @@ public final class FluidSimulation {
             return;
         }
         solver.step();
+        generation++;
         recordStep(solver.lastStepNanos());
         removeBelow(removeBelowY);
     }
@@ -284,11 +536,15 @@ public final class FluidSimulation {
     private void removeBelow(int worldY) {
         ParticleSoA p = particles;
         float y = worldY - p.originY;
+        int before = p.activeCount;
         for (int i = p.activeCount - 1; i >= 0; i--) {
             if (p.posY[i] < y) {
                 p.remove(i);
                 removedInVoid++;
             }
+        }
+        if (p.activeCount != before) {
+            particlesChanged();
         }
     }
 

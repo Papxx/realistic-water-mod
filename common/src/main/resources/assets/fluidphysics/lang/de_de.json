@@ -1,0 +1,8 @@
+{
+  "block.fluidphysics.physics_sand": "Rieselnder Sand",
+  "item.fluidphysics.physics_water_bucket": "Physik-Wassereimer",
+  "item.fluidphysics.physics_lava_bucket": "Physik-Lavaeimer",
+  "item.fluidphysics.physics_slime_bucket": "Physik-Schleimeimer",
+  "message.fluidphysics.limit_reached": "Partikellimit erreicht",
+  "message.fluidphysics.too_far": "Zu weit von den anderen Partikeln in dieser Dimension entfernt"
+}

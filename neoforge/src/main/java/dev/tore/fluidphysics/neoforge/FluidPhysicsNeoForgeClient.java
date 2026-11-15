@@ -4,6 +4,7 @@ package dev.tore.fluidphysics.neoforge;
 import dev.tore.fluidphysics.FluidPhysicsCommon;
 import dev.tore.fluidphysics.client.ClientSimulation;
 import dev.tore.fluidphysics.client.render.ParticleBatchRenderer;
+import dev.tore.fluidphysics.interaction.Simulations;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.common.Mod;
@@ -15,6 +16,8 @@ import net.neoforged.neoforge.common.NeoForge;
 @Mod(value = FluidPhysicsCommon.MOD_ID, dist = Dist.CLIENT)
 public final class FluidPhysicsNeoForgeClient {
     public FluidPhysicsNeoForgeClient() {
+        Simulations.setClientLookup(ClientSimulation::lookup);
+
         NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class,
                 event -> ClientSimulation.tick(Minecraft.getInstance()));
 

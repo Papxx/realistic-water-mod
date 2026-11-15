@@ -53,6 +53,15 @@ public final class FluidPhysicsCommand {
         dispatcher.register(Commands.literal("fluidphysics")
                 .requires(GAME_MASTER)
                 .then(Commands.literal("stats").executes(ctx -> stats(ctx.getSource())))
+                // TEMPORARY test hook, not to be committed.
+                .then(Commands.literal("debuguse").executes(ctx -> {
+                    net.minecraft.server.level.ServerPlayer player = ctx.getSource().getPlayerOrException();
+                    net.minecraft.world.InteractionResult result = player.gameMode.useItem(player, player.level(),
+                            player.getMainHandItem(), net.minecraft.world.InteractionHand.MAIN_HAND);
+                    ctx.getSource().sendSuccess(() -> Component.literal("debuguse " + result + " -> "
+                            + player.getMainHandItem()), false);
+                    return 1;
+                }))
                 .then(Commands.literal("clear").executes(ctx -> clear(ctx.getSource())))
                 .then(spawn)
                 .then(Commands.literal("limit")

@@ -2,6 +2,7 @@
 package dev.tore.fluidphysics.physics;
 
 import static dev.tore.fluidphysics.physics.MaterialProperties.COHESION;
+import static dev.tore.fluidphysics.physics.MaterialProperties.COLLISION_CLASS;
 import static dev.tore.fluidphysics.physics.MaterialProperties.GRANULAR;
 import static dev.tore.fluidphysics.physics.MaterialProperties.GRAVITY;
 import static dev.tore.fluidphysics.physics.MaterialProperties.RESTITUTION;
@@ -120,8 +121,10 @@ public final class PbfSolver {
 
     /** Per-worker slots are this many ints apart (256 bytes), so two workers never write to the same cache line. */
     private static final int WORKER_STRIDE = 64;
-    /** Per-worker share of the direct-mapped block cache: 64 slots, padded to 1 KiB. */
-    private static final int MASK_CACHE_STRIDE = 128;
+    /** Slots of the direct-mapped block cache per worker and collision class. */
+    private static final int MASK_CACHE_SLOTS = 64;
+    /** Per-worker share of the direct-mapped block cache: 64 slots per collision class, padded to 2 KiB. */
+    private static final int MASK_CACHE_STRIDE = 256;
 
     private static final byte CONTACT_NONE = 0;
     // Faces of a sub-voxel, also used as the outward normal of a wall contact:
@@ -166,8 +169,8 @@ public final class PbfSolver {
     private final long[] slotBlockMask;
     private int seenVoxelVersion;
     /**
-     * Per worker: a direct-mapped cache of recent block lookups, one slot per block position modulo 4 on each axis.
-     * Particles are processed in grid order, so consecutive lookups hit the same few blocks.
+     * Per worker and collision class: a direct-mapped cache of recent block lookups, one slot per block position
+     * modulo 4 on each axis. Particles are processed in grid order, so consecutive lookups hit the same few blocks.
      */
     private final long[] maskCacheKey;
     private final long[] maskCacheValue;
@@ -245,6 +248,14 @@ public final class PbfSolver {
 
     public SpatialHashGrid grid() {
         return grid;
+    }
+
+    /**
+     * Forgets the block masks remembered per particle slot. Call whenever particles were added or removed: a slot
+     * then holds another particle, possibly of another material, and masks depend on the material's collision class.
+     */
+    public void invalidateBlockCaches() {
+        Arrays.fill(slotBlockKey, Long.MIN_VALUE);
     }
 
     /** Wall time of the last {@link #step()} in nanoseconds. */
@@ -490,7 +501,8 @@ public final class PbfSolver {
             int wx = particles.originX + lbx;
             int wy = particles.originY + lby;
             int wz = particles.originZ + lbz;
-            long mask = blockMaskOf(k, wx, wy, wz, worker);
+            int cls = COLLISION_CLASS[mat[k]];
+            long mask = blockMaskOf(k, wx, wy, wz, cls, worker);
             float fx = (px - lbx) * 4f;
             float fy = (py - lby) * 4f;
             float fz = (pz - lbz) * 4f;
@@ -505,32 +517,32 @@ public final class PbfSolver {
                 float uz = fz - sz;
                 // For each solid face: density, and the gradient pointing towards the face.
                 float d;
-                if (!faceOpen(1, wx, wy, wz, mask, sx, sy, sz, worker)) {
+                if (!faceOpen(1, wx, wy, wz, mask, sx, sy, sz, cls, worker)) {
                     d = wallDistance(ux * 0.25f);
                     density += wallDensityAt(d);
                     gx -= wallGradientAt(d);
                 }
-                if (!faceOpen(2, wx, wy, wz, mask, sx, sy, sz, worker)) {
+                if (!faceOpen(2, wx, wy, wz, mask, sx, sy, sz, cls, worker)) {
                     d = wallDistance((1f - ux) * 0.25f);
                     density += wallDensityAt(d);
                     gx += wallGradientAt(d);
                 }
-                if (!faceOpen(3, wx, wy, wz, mask, sx, sy, sz, worker)) {
+                if (!faceOpen(3, wx, wy, wz, mask, sx, sy, sz, cls, worker)) {
                     d = wallDistance(uy * 0.25f);
                     density += wallDensityAt(d);
                     gy -= wallGradientAt(d);
                 }
-                if (!faceOpen(4, wx, wy, wz, mask, sx, sy, sz, worker)) {
+                if (!faceOpen(4, wx, wy, wz, mask, sx, sy, sz, cls, worker)) {
                     d = wallDistance((1f - uy) * 0.25f);
                     density += wallDensityAt(d);
                     gy += wallGradientAt(d);
                 }
-                if (!faceOpen(5, wx, wy, wz, mask, sx, sy, sz, worker)) {
+                if (!faceOpen(5, wx, wy, wz, mask, sx, sy, sz, cls, worker)) {
                     d = wallDistance(uz * 0.25f);
                     density += wallDensityAt(d);
                     gz -= wallGradientAt(d);
                 }
-                if (!faceOpen(6, wx, wy, wz, mask, sx, sy, sz, worker)) {
+                if (!faceOpen(6, wx, wy, wz, mask, sx, sy, sz, cls, worker)) {
                     d = wallDistance((1f - uz) * 0.25f);
                     density += wallDensityAt(d);
                     gz += wallGradientAt(d);
@@ -767,26 +779,30 @@ public final class PbfSolver {
         }
     }
 
-    /** Sub-voxel mask of a block through the worker's direct-mapped cache. */
-    private long cachedMask(int worker, int wx, int wy, int wz) {
+    /** Sub-voxel mask of a block for collision class {@code cls}, through the worker's direct-mapped cache. */
+    private long cachedMask(int worker, int cls, int wx, int wy, int wz) {
         long key = BlockPos.asLong(wx, wy, wz);
-        int slot = worker * MASK_CACHE_STRIDE + ((wx & 3) | ((wy & 3) << 2) | ((wz & 3) << 4));
+        int slot = worker * MASK_CACHE_STRIDE + cls * MASK_CACHE_SLOTS
+                + ((wx & 3) | ((wy & 3) << 2) | ((wz & 3) << 4));
         if (maskCacheKey[slot] == key) {
             return maskCacheValue[slot];
         }
-        long mask = voxels.getMask(wx, wy, wz);
+        long mask = voxels.getMask(wx, wy, wz, cls);
         maskCacheKey[slot] = key;
         maskCacheValue[slot] = mask;
         return mask;
     }
 
-    /** Sub-voxel mask of block ({@code wx}, {@code wy}, {@code wz}), remembered per particle. */
-    private long blockMaskOf(int k, int wx, int wy, int wz, int worker) {
+    /**
+     * Sub-voxel mask of block ({@code wx}, {@code wy}, {@code wz}) for particle {@code k}'s collision class
+     * {@code cls}, remembered per particle.
+     */
+    private long blockMaskOf(int k, int wx, int wy, int wz, int cls, int worker) {
         long key = BlockPos.asLong(wx, wy, wz);
         if (key == blockKey[k]) {
             return blockMask[k];
         }
-        long mask = cachedMask(worker, wx, wy, wz);
+        long mask = cachedMask(worker, cls, wx, wy, wz);
         blockKey[k] = key;
         blockMask[k] = mask;
         return mask;
@@ -806,7 +822,8 @@ public final class PbfSolver {
         int wx = particles.originX + lbx;
         int wy = particles.originY + lby;
         int wz = particles.originZ + lbz;
-        long mask = blockMaskOf(k, wx, wy, wz, worker);
+        int cls = COLLISION_CLASS[mat[k]];
+        long mask = blockMaskOf(k, wx, wy, wz, cls, worker);
         if (mask == ChunkVoxelCache.EMPTY) {
             return;
         }
@@ -862,8 +879,8 @@ public final class PbfSolver {
                 face = 6;
             }
         }
-        if (face == 0 || !faceOpen(face, wx, wy, wz, mask, sx, sy, sz, worker)) {
-            face = nearestOpenFace(wx, wy, wz, mask, sx, sy, sz, ux, uy, uz, worker);
+        if (face == 0 || !faceOpen(face, wx, wy, wz, mask, sx, sy, sz, cls, worker)) {
+            face = nearestOpenFace(wx, wy, wz, mask, sx, sy, sz, ux, uy, uz, cls, worker);
         }
         float friction = WALL_FRICTION[mat[k]];
         switch (face) {
@@ -923,37 +940,38 @@ public final class PbfSolver {
     }
 
     private int nearestOpenFace(int wx, int wy, int wz, long mask, int sx, int sy, int sz,
-                                float ux, float uy, float uz, int worker) {
+                                float ux, float uy, float uz, int cls, int worker) {
         int face = 0;
         float best = Float.MAX_VALUE;
-        if (ux < best && faceOpen(1, wx, wy, wz, mask, sx, sy, sz, worker)) {
+        if (ux < best && faceOpen(1, wx, wy, wz, mask, sx, sy, sz, cls, worker)) {
             face = 1;
             best = ux;
         }
-        if (1f - ux < best && faceOpen(2, wx, wy, wz, mask, sx, sy, sz, worker)) {
+        if (1f - ux < best && faceOpen(2, wx, wy, wz, mask, sx, sy, sz, cls, worker)) {
             face = 2;
             best = 1f - ux;
         }
-        if (uy < best && faceOpen(3, wx, wy, wz, mask, sx, sy, sz, worker)) {
+        if (uy < best && faceOpen(3, wx, wy, wz, mask, sx, sy, sz, cls, worker)) {
             face = 3;
             best = uy;
         }
-        if (1f - uy < best && faceOpen(4, wx, wy, wz, mask, sx, sy, sz, worker)) {
+        if (1f - uy < best && faceOpen(4, wx, wy, wz, mask, sx, sy, sz, cls, worker)) {
             face = 4;
             best = 1f - uy;
         }
-        if (uz < best && faceOpen(5, wx, wy, wz, mask, sx, sy, sz, worker)) {
+        if (uz < best && faceOpen(5, wx, wy, wz, mask, sx, sy, sz, cls, worker)) {
             face = 5;
             best = uz;
         }
-        if (1f - uz < best && faceOpen(6, wx, wy, wz, mask, sx, sy, sz, worker)) {
+        if (1f - uz < best && faceOpen(6, wx, wy, wz, mask, sx, sy, sz, cls, worker)) {
             face = 6;
         }
         return face;
     }
 
     /** Whether the sub-voxel on the other side of {@code face} is free, looking into the next block if needed. */
-    private boolean faceOpen(int face, int wx, int wy, int wz, long mask, int sx, int sy, int sz, int worker) {
+    private boolean faceOpen(int face, int wx, int wy, int wz, long mask, int sx, int sy, int sz, int cls,
+                             int worker) {
         switch (face) {
             case 1 -> sx--;
             case 2 -> sx++;
@@ -964,22 +982,22 @@ public final class PbfSolver {
         }
         if (sx < 0) {
             sx = 3;
-            mask = cachedMask(worker, wx - 1, wy, wz);
+            mask = cachedMask(worker, cls, wx - 1, wy, wz);
         } else if (sx > 3) {
             sx = 0;
-            mask = cachedMask(worker, wx + 1, wy, wz);
+            mask = cachedMask(worker, cls, wx + 1, wy, wz);
         } else if (sy < 0) {
             sy = 3;
-            mask = cachedMask(worker, wx, wy - 1, wz);
+            mask = cachedMask(worker, cls, wx, wy - 1, wz);
         } else if (sy > 3) {
             sy = 0;
-            mask = cachedMask(worker, wx, wy + 1, wz);
+            mask = cachedMask(worker, cls, wx, wy + 1, wz);
         } else if (sz < 0) {
             sz = 3;
-            mask = cachedMask(worker, wx, wy, wz - 1);
+            mask = cachedMask(worker, cls, wx, wy, wz - 1);
         } else if (sz > 3) {
             sz = 0;
-            mask = cachedMask(worker, wx, wy, wz + 1);
+            mask = cachedMask(worker, cls, wx, wy, wz + 1);
         }
         return !ChunkVoxelCache.isSolid(mask, sx, sy, sz);
     }

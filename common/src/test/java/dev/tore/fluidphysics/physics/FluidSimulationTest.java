@@ -199,6 +199,94 @@ class FluidSimulationTest {
         assertEquals(0L, allocated, "tick, impulse and condense must not allocate");
     }
 
+    @Test
+    void occupancyCountsParticlesPerBlockAndMaterial() {
+        FluidSimulation sim = new FluidSimulation(POOL, 1000);
+        assertNull(sim.occupancy());
+        sim.spawn(3, 4, 5, MATERIAL_WATER, 64, 2f, 0f, 0f);
+        sim.spawn(3, 4, 5, MATERIAL_LAVA, 10, 0f, 0f, 0f);
+        sim.spawn(-7, 4, 5, MATERIAL_WATER, 20, 0f, 0f, 0f);
+        ParticleSoA p = sim.particles();
+        for (int i = 0; i < 30; i++) {
+            p.sleepTicks[i] = FluidSimulation.RESTING_TICKS + 1;
+        }
+
+        BlockOccupancy occupancy = sim.occupancy();
+        assertEquals(2, occupancy.size());
+        int slot = occupancy.slotOf(3, 4, 5);
+        assertEquals(64, occupancy.count(slot, MATERIAL_WATER));
+        assertEquals(10, occupancy.count(slot, MATERIAL_LAVA));
+        assertEquals(74, occupancy.total(slot));
+        assertEquals(30, occupancy.resting(slot, MATERIAL_WATER));
+        assertEquals(64 * 2f / 74, occupancy.meanVelX(slot), 1e-5f);
+        assertEquals(20, occupancy.count(-7, 4, 5, MATERIAL_WATER));
+        assertEquals(-1, occupancy.slotOf(0, 0, 0));
+        assertEquals(0, occupancy.count(0, 0, 0, MATERIAL_WATER));
+        // Unchanged particles: the same table, not rebuilt.
+        assertTrue(occupancy == sim.occupancy());
+    }
+
+    @Test
+    void markNearestPicksTheClosestAndRemoveMarkedReportsThem() {
+        FluidSimulation sim = new FluidSimulation(POOL, 1000);
+        for (int x = 0; x < 4; x++) {
+            sim.spawn(x, 0, 0, MATERIAL_WATER, 64, 0f, 0f, 0f);
+        }
+        sim.spawn(0, 0, 0, MATERIAL_LAVA, 64, 0f, 0f, 0f);
+
+        // 64 nearest to a point a quarter block into block 0: exactly the water of block 0 (its farthest particle is
+        // 0.82 away, the nearest of block 1 is 0.89 away; lava is another material). From the block centre, the
+        // corners of block 0 and the face of block 1 would be equally far.
+        assertEquals(64, sim.markNearest(0.25, 0.5, 0.5, MATERIAL_WATER, 64, 10f, false, true));
+        int[] removedPerBlock = new int[4];
+        assertEquals(64, sim.removeMarked((x, y, z, material) -> {
+            assertEquals(MATERIAL_WATER, material);
+            removedPerBlock[x]++;
+        }));
+        assertEquals(64, removedPerBlock[0]);
+        assertEquals(0, countInBlock(sim, 0, 0, 0, MATERIAL_WATER));
+        assertEquals(64, countInBlock(sim, 1, 0, 0, MATERIAL_WATER));
+        assertEquals(64, countInBlock(sim, 0, 0, 0, MATERIAL_LAVA));
+        for (int i = 0; i < sim.activeCount(); i++) {
+            assertTrue(!sim.isMarked(i), "marks must be cleared after removal");
+        }
+
+        // All or nothing: 1 block radius around block 3 holds only 64 + some of block 2, not 300.
+        assertEquals(0, sim.markNearest(3.5, 0.5, 0.5, MATERIAL_WATER, 300, 1f, false, true));
+        assertEquals(0, sim.removeMarked(null));
+        // Resting only: nothing rests yet.
+        assertEquals(0, sim.markNearest(3.5, 0.5, 0.5, MATERIAL_WATER, 10, 5f, true, false));
+        assertEquals(5, sim.markInBlock(2, 0, 0, MATERIAL_WATER, 5));
+        assertEquals(5, sim.removeMarked(null));
+        assertEquals(59, countInBlock(sim, 2, 0, 0, MATERIAL_WATER));
+    }
+
+    @Test
+    void markingAndRemovingAllocateNothing() {
+        FluidSimulation sim = new FluidSimulation(POOL, 4096);
+        for (int i = 0; i < 32; i++) {
+            sim.spawn(i % 8, i / 8, 0, MATERIAL_WATER, 64, 0f, 0f, 0f);
+        }
+        // Warm-up: the first rounds allocate the tables and, once, a few hundred bytes while the JIT settles.
+        for (int round = 0; round < 5; round++) {
+            sim.markNearest(4.0, 2.0, 0.5, MATERIAL_WATER, 64, 3f, false, true);
+            sim.markInBlock(1, 1, 0, MATERIAL_WATER, 10);
+            sim.removeMarked(null);
+            sim.occupancy();
+        }
+
+        com.sun.management.ThreadMXBean threads = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
+        long before = threads.getCurrentThreadAllocatedBytes();
+        for (int round = 0; round < 10; round++) {
+            sim.markNearest(4.0, 2.0, 0.5, MATERIAL_WATER, 64, 3f, false, true);
+            sim.markInBlock(1, 1, 0, MATERIAL_WATER, 10);
+            sim.removeMarked(null);
+            sim.occupancy();
+        }
+        long allocated = threads.getCurrentThreadAllocatedBytes() - before;
+        assertEquals(0L, allocated, "marking, removing and counting must not allocate");
+    }
+
     private static int countInBlock(FluidSimulation sim, int bx, int by, int bz, byte material) {
         ParticleSoA p = sim.particles();
         int n = 0;

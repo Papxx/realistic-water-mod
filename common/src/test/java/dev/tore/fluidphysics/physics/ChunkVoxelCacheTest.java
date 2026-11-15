@@ -10,6 +10,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.EmptyBlockGetter;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.SlabType;
@@ -71,6 +72,52 @@ class ChunkVoxelCacheTest {
             }
         }
         assertFalse(ChunkVoxelCache.isSolid(cauldron, 1, 3, 1));
+    }
+
+    @Test
+    void fluidAndCauldronTags() {
+        assertEquals(ChunkVoxelCache.TAG_WATER | ChunkVoxelCache.TAG_SOURCE,
+                ChunkVoxelCache.computeTag(Blocks.WATER.defaultBlockState()));
+        assertEquals(ChunkVoxelCache.TAG_WATER,
+                ChunkVoxelCache.computeTag(Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 3)));
+        assertEquals(ChunkVoxelCache.TAG_LAVA | ChunkVoxelCache.TAG_SOURCE,
+                ChunkVoxelCache.computeTag(Blocks.LAVA.defaultBlockState()));
+        assertEquals(ChunkVoxelCache.TAG_WATER | ChunkVoxelCache.TAG_SOURCE, ChunkVoxelCache.computeTag(
+                Blocks.OAK_SLAB.defaultBlockState().setValue(SlabBlock.WATERLOGGED, true)));
+        assertEquals(ChunkVoxelCache.TAG_CAULDRON, ChunkVoxelCache.computeTag(Blocks.CAULDRON.defaultBlockState()));
+        assertEquals(ChunkVoxelCache.TAG_CAULDRON,
+                ChunkVoxelCache.computeTag(Blocks.WATER_CAULDRON.defaultBlockState()));
+        assertEquals(0, ChunkVoxelCache.computeTag(Blocks.STONE.defaultBlockState()));
+    }
+
+    @Test
+    void sourceBlocksAreSolidOnlyForTheirOwnFluid() {
+        ChunkVoxelCache cache = new ChunkVoxelCache();
+        cache.putTag(0, 0, 0, ChunkVoxelCache.TAG_WATER | ChunkVoxelCache.TAG_SOURCE);
+        cache.putTag(1, 0, 0, ChunkVoxelCache.TAG_WATER);
+        cache.putTag(2, 0, 0, ChunkVoxelCache.TAG_LAVA | ChunkVoxelCache.TAG_SOURCE);
+        cache.putMask(3, 0, 0, LOWER_HALF);
+        cache.putTag(3, 0, 0, ChunkVoxelCache.TAG_WATER | ChunkVoxelCache.TAG_SOURCE);
+
+        assertEquals(ChunkVoxelCache.FULL, cache.getMask(0, 0, 0, ChunkVoxelCache.CLASS_WATER));
+        assertEquals(ChunkVoxelCache.EMPTY, cache.getMask(0, 0, 0, ChunkVoxelCache.CLASS_LAVA));
+        assertEquals(ChunkVoxelCache.EMPTY, cache.getMask(0, 0, 0, ChunkVoxelCache.CLASS_SOLID));
+        assertEquals(ChunkVoxelCache.EMPTY, cache.getMask(1, 0, 0, ChunkVoxelCache.CLASS_WATER));
+        assertEquals(ChunkVoxelCache.FULL, cache.getMask(2, 0, 0, ChunkVoxelCache.CLASS_LAVA));
+        assertEquals(ChunkVoxelCache.EMPTY, cache.getMask(2, 0, 0, ChunkVoxelCache.CLASS_WATER));
+        // A waterlogged slab: full for water, the slab shape for everything else.
+        assertEquals(ChunkVoxelCache.FULL, cache.getMask(3, 0, 0, ChunkVoxelCache.CLASS_WATER));
+        assertEquals(LOWER_HALF, cache.getMask(3, 0, 0, ChunkVoxelCache.CLASS_SOLID));
+    }
+
+    @Test
+    void forcedEmptyBlocksReadAsAir() {
+        ChunkVoxelCache cache = new ChunkVoxelCache();
+        cache.putMask(4, 5, 6, ChunkVoxelCache.FULL);
+        int version = cache.version();
+        cache.forceEmpty(4, 5, 6);
+        assertEquals(ChunkVoxelCache.EMPTY, cache.getMask(4, 5, 6));
+        assertTrue(cache.version() != version, "solvers must drop the old mask");
     }
 
     private static long mask(BlockState state) {

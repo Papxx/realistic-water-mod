@@ -10,6 +10,7 @@ import dev.tore.fluidphysics.physics.WorkerPool;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.Level;
 
 /**
  * The client's own simulation of the level it shows. It is driven only by the server's events (spawn, impulse,
@@ -60,10 +61,24 @@ public final class ClientSimulation {
     public static void onSpawn(FluidSpawnPayload payload) {
         FluidSimulation sim = forCurrentLevel();
         if (sim != null) {
-            long pos = payload.packedBlockPos();
-            sim.spawn(BlockPos.getX(pos), BlockPos.getY(pos), BlockPos.getZ(pos), payload.materialType(),
-                    payload.count(), payload.dirX(), payload.dirY(), payload.dirZ());
+            BlockPos pos = BlockPos.of(payload.packedBlockPos());
+            int spawned = sim.spawn(pos.getX(), pos.getY(), pos.getZ(), payload.materialType(), payload.count(),
+                    payload.dirX(), payload.dirY(), payload.dirZ());
+            // The server only spawns into blocks particles can occupy. If this client still sees a solid block there,
+            // its removal (a crumbling sand block) is on the way: the spawn event can overtake the block update.
+            if (spawned > 0 && !level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()) {
+                sim.voxels().forceEmpty(pos.getX(), pos.getY(), pos.getZ());
+            }
         }
+    }
+
+    /**
+     * The simulation of {@code shown} if this thread owns it (see {@link #currentFor}); installed as the client side of
+     * {@code Simulations.forLevel}.
+     */
+    public static FluidSimulation lookup(Level shown) {
+        return Minecraft.getInstance().isSameThread() && shown instanceof ClientLevel client
+                ? currentFor(client) : null;
     }
 
     public static void onImpulse(FluidImpulsePayload payload) {

@@ -8,16 +8,20 @@ import dev.tore.fluidphysics.network.FluidClearPayload;
 import dev.tore.fluidphysics.network.FluidCondensePayload;
 import dev.tore.fluidphysics.network.FluidImpulsePayload;
 import dev.tore.fluidphysics.network.FluidSpawnPayload;
+import dev.tore.fluidphysics.registry.ModRegistry;
 import dev.tore.fluidphysics.server.ServerSimulations;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
+import net.neoforged.neoforge.registries.RegisterEvent;
 
 @Mod(FluidPhysicsCommon.MOD_ID)
 public final class FluidPhysicsNeoForge {
@@ -26,6 +30,9 @@ public final class FluidPhysicsNeoForge {
 
     public FluidPhysicsNeoForge(IEventBus modBus) {
         FluidPhysicsCommon.init();
+        modBus.addListener(RegisterEvent.class, FluidPhysicsNeoForge::register);
+        modBus.addListener(BuildCreativeModeTabContentsEvent.class,
+                event -> ModRegistry.addToCreativeTab(event.getTabKey(), event::accept));
         modBus.addListener(RegisterPayloadHandlersEvent.class, FluidPhysicsNeoForge::registerPayloads);
         NeoForge.EVENT_BUS.addListener(RegisterCommandsEvent.class,
                 event -> FluidPhysicsCommand.register(event.getDispatcher()));
@@ -35,6 +42,15 @@ public final class FluidPhysicsNeoForge {
             }
         });
         NeoForge.EVENT_BUS.addListener(ServerStoppedEvent.class, event -> ServerSimulations.onServerStopped());
+    }
+
+    /** NeoForge fires this once per registry, blocks before items. */
+    private static void register(RegisterEvent event) {
+        if (event.getRegistryKey().equals(Registries.BLOCK)) {
+            ModRegistry.registerBlocks((id, block) -> event.register(Registries.BLOCK, id, () -> block));
+        } else if (event.getRegistryKey().equals(Registries.ITEM)) {
+            ModRegistry.registerItems((id, item) -> event.register(Registries.ITEM, id, () -> item));
+        }
     }
 
     private static void registerPayloads(RegisterPayloadHandlersEvent event) {
