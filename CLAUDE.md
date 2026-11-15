@@ -24,7 +24,7 @@ ALWAYS respect these API differences using Stonecutter conditions or helper meth
 
 ## 3. Core Physics Architecture (Strict Performance Rules)
 1. **NEVER use Minecraft Entities (`Entity`) or Objects per Particle:**
-   - All particles live in a pre-allocated **Structure of Arrays (SoA)** inside `ParticleSoA` (`float[] posX/Y/Z, prevX/Y/Z, predX/Y/Z, velX/Y/Z, lambda; byte[] material; short[] sleepTicks`; exact layout in `Plan.md` §3.1).
+   - All particles live in a pre-allocated **Structure of Arrays (SoA)** inside `ParticleSoA` (`float[] posX/Y/Z, prevX/Y/Z, predX/Y/Z, velX/Y/Z, lambda; byte[] material, neighbors; short[] sleepTicks`; exact layout in `Plan.md` §3.1).
    - Hard cap: `MAX_PARTICLES = 32768` (array size). Configurable runtime limit `maxParticles` via `/fluidphysics limit` (default `32768` on client; server default is a lower value, `8192`, to be tuned).
    - **Zero Heap Allocations inside the tick loop** (no `new Vec3()`, no `BlockPos` boxing—use packed `long` via `BlockPos.asLong(x, y, z)`).
 2. **Spatial Indexing (O(N) Counting-Sort Uniform Grid):**

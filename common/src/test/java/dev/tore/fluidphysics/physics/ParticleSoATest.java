@@ -23,6 +23,22 @@ class ParticleSoATest {
     }
 
     @Test
+    void neighbourCountsAreUnknownUntilSteppedAndMoveWithTheirParticle() {
+        ParticleSoA particles = new ParticleSoA(8);
+        particles.add(1f, 0f, 0f, 0f, 0f, 0f, ParticleSoA.MATERIAL_WATER);
+        particles.add(2f, 0f, 0f, 0f, 0f, 0f, ParticleSoA.MATERIAL_WATER);
+        assertEquals(ParticleSoA.NEIGHBORS_UNKNOWN, particles.neighbors[1]);
+        particles.neighbors[1] = 7;
+
+        particles.remove(0);
+        ParticleSoA larger = new ParticleSoA(16);
+        larger.copyFrom(particles);
+
+        assertEquals(7, particles.neighbors[0]);
+        assertEquals(7, larger.neighbors[0]);
+    }
+
+    @Test
     void addStopsAtTheRuntimeLimit() {
         ParticleSoA particles = new ParticleSoA(100);
         particles.setMaxParticles(70);

@@ -25,6 +25,8 @@ public final class ParticleSoA {
     public static final int PARTICLES_PER_BLOCK = 64;
     /** Edge length of one particle's share of a block, and of one collision sub-voxel. */
     public static final float PARTICLE_SPACING = 0.25f;
+    /** {@link #neighbors} value of a particle that has not been stepped yet. */
+    public static final byte NEIGHBORS_UNKNOWN = -1;
 
     /** Array size of this instance, at most {@link #MAX_PARTICLES}. */
     public final int capacity;
@@ -49,6 +51,11 @@ public final class ParticleSoA {
     public final byte[] material;
     /** Consecutive ticks the particle moved slower than the sleep threshold. */
     public final short[] sleepTicks;
+    /**
+     * Neighbours within the smoothing radius in the last substep (at most {@link PbfSolver#MAX_NEIGHBORS}), or
+     * {@link #NEIGHBORS_UNKNOWN} until the particle's first step. Solver output, read by the renderer to find spray.
+     */
+    public final byte[] neighbors;
 
     public int activeCount;
     /** Runtime limit set by {@code /fluidphysics limit}, at most {@link #capacity}. */
@@ -84,6 +91,7 @@ public final class ParticleSoA {
         lambda = new float[capacity];
         material = new byte[capacity];
         sleepTicks = new short[capacity];
+        neighbors = new byte[capacity];
     }
 
     public int maxParticles() {
@@ -127,6 +135,7 @@ public final class ParticleSoA {
         lambda[i] = 0f;
         material[i] = mat;
         sleepTicks[i] = 0;
+        neighbors[i] = NEIGHBORS_UNKNOWN;
         return i;
     }
 
@@ -189,6 +198,7 @@ public final class ParticleSoA {
             lambda[i] = lambda[last];
             material[i] = material[last];
             sleepTicks[i] = sleepTicks[last];
+            neighbors[i] = neighbors[last];
         }
     }
 
@@ -220,6 +230,7 @@ public final class ParticleSoA {
         System.arraycopy(source.lambda, 0, lambda, 0, n);
         System.arraycopy(source.material, 0, material, 0, n);
         System.arraycopy(source.sleepTicks, 0, sleepTicks, 0, n);
+        System.arraycopy(source.neighbors, 0, neighbors, 0, n);
         activeCount = n;
         originX = source.originX;
         originY = source.originY;

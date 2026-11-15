@@ -148,6 +148,26 @@ class PbfSolverTest {
     }
 
     @Test
+    void stepRecordsNeighbourCountsForTheRenderer() {
+        ParticleSoA particles = new ParticleSoA(128);
+        ChunkVoxelCache world = TestWorlds.box(8, 8, 4);
+        particles.spawnBlock(2, 1, 2, MATERIAL_WATER, 64, 0f, 0f, 0f);
+        int droplet = particles.add(6.5f, 3.5f, 6.5f, 0f, 0f, 0f, MATERIAL_WATER);
+        PbfSolver solver = new PbfSolver(particles, world);
+
+        solver.step();
+
+        assertEquals(0, particles.neighbors[droplet], "a lone droplet has no neighbours");
+        int inBlock = 0;
+        for (int i = 0; i < 64; i++) {
+            assertTrue(particles.neighbors[i] >= 2 && particles.neighbors[i] <= PbfSolver.MAX_NEIGHBORS,
+                    "particle " + i + " of a full block has " + particles.neighbors[i] + " neighbours");
+            inBlock += particles.neighbors[i];
+        }
+        assertTrue(inBlock / 64.0 > 4.0, "mean neighbour count in a full block: " + inBlock / 64.0);
+    }
+
+    @Test
     void particleRestsOnTopOfABottomSlab() {
         ParticleSoA particles = new ParticleSoA(16);
         ChunkVoxelCache world = new ChunkVoxelCache();

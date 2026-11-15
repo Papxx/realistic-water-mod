@@ -2,6 +2,7 @@
 package dev.tore.fluidphysics.fabric;
 
 import dev.tore.fluidphysics.client.ClientSimulation;
+import dev.tore.fluidphysics.client.render.ParticleBatchRenderer;
 import dev.tore.fluidphysics.network.FluidClearPayload;
 import dev.tore.fluidphysics.network.FluidCondensePayload;
 import dev.tore.fluidphysics.network.FluidImpulsePayload;
@@ -9,6 +10,11 @@ import dev.tore.fluidphysics.network.FluidSpawnPayload;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+//? if >=1.21.11 {
+import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
+//?} else {
+/*import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
+*///?}
 
 /** Client entry point (fabric.mod.json "client"); never loaded on a dedicated server. */
 public final class FluidPhysicsFabricClient implements ClientModInitializer {
@@ -25,5 +31,12 @@ public final class FluidPhysicsFabricClient implements ClientModInitializer {
                 (payload, context) -> ClientSimulation.onClear());
 
         ClientTickEvents.END_CLIENT_TICK.register(ClientSimulation::tick);
+
+        // After translucent terrain, before clouds and weather (and, on 1.21.11, before vanilla particles).
+        //? if >=1.21.11 {
+        WorldRenderEvents.END_MAIN.register(context -> ParticleBatchRenderer.render());
+        //?} else {
+        /*WorldRenderEvents.AFTER_TRANSLUCENT.register(context -> ParticleBatchRenderer.render());
+        *///?}
     }
 }

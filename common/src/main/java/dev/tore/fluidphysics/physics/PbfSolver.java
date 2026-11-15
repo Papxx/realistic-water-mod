@@ -381,7 +381,7 @@ public final class PbfSolver {
         }
     }
 
-    /** Writes positions and velocities back to the particles (particle order). */
+    /** Writes positions, velocities, lambdas and neighbour counts back to the particles (particle order). */
     private void scatter(int from, int to, int worker) {
         ParticleSoA p = particles;
         int[] order = grid.sortedIndices;
@@ -394,6 +394,7 @@ public final class PbfSolver {
             p.velY[i] = vy[k];
             p.velZ[i] = vz[k];
             p.lambda[i] = lam[k];
+            p.neighbors[i] = (byte) neighborCount[k];
             slotBlockKey[i] = blockKey[k];
             slotBlockMask[i] = blockMask[k];
         }

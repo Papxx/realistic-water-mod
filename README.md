@@ -4,7 +4,7 @@
 
 Realistic Fluid & Granular Physics (`fluidphysics`) replaces Minecraft's cellular fluids and falling-sand behaviour with a real-time, particle-based simulation. Liquids flow around obstacles, spray from pipes, burst through broken dams and settle into piles, all while staying fast enough for multiplayer.
 
-> **Status:** early development (v0.1.0). The physics core (solver, spatial grid, voxel collision), the network events and the `/fluidphysics` command are in place and covered by unit tests. Particles can be spawned and simulated on servers, but they are not rendered yet: rendering, items and world hooks come next. The features below describe the design targets. See [Plan.md](Plan.md) for the detailed specification and progress.
+> **Status:** early development (v0.1.0). The physics core (solver, spatial grid, voxel collision), the network events and the `/fluidphysics` command are in place and covered by unit tests. Particles spawned with `/fluidphysics spawn` are simulated on the server and on every client and rendered in game. Items (physics buckets, crumbling sand) and world hooks (condensation, cauldrons, boats, explosions) come next. The features below describe the design targets. See [Plan.md](Plan.md) for the detailed specification and progress.
 
 ## Supported platforms
 
@@ -43,8 +43,10 @@ Requires Java 21. The mod uses the official Mojang mappings, has no heavy runtim
 ### Smooth visuals
 
 - Interpolated rendering at 60 to 240+ FPS on top of the 20 TPS simulation.
-- Foam-coloured droplets, glowing lava, translucent slime and grainy sand.
-- Rendering goes through standard render types for compatibility with Sodium and Iris.
+- Water in the biome's water colour that foams where it splashes and breaks into small white spray droplets, glowing lava that crusts over when it rests, translucent slime and grainy sand.
+- Moving liquids stretch along their direction of motion while keeping their volume, so falling water streaks instead of tumbling as cubes.
+- All particles are drawn in one batch per frame, sorted far to near so translucent water and slime blend correctly, with only the faces that point at the camera. Lighting follows the world's block and sky light.
+- Rendering goes through a standard vanilla render type and the loaders' own render events, for compatibility with Sodium and Iris (not tested yet).
 
 ## Performance design
 

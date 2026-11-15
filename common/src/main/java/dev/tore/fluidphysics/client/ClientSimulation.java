@@ -35,6 +35,14 @@ public final class ClientSimulation {
         return simulation;
     }
 
+    /**
+     * The simulation of {@code shown}, or null if there is none yet or it still belongs to the previous level (a frame
+     * can be drawn after a dimension change and before the next tick resets the simulation).
+     */
+    public static FluidSimulation currentFor(ClientLevel shown) {
+        return shown != null && shown == level ? simulation : null;
+    }
+
     /** Advances the client particles by one tick; call at the end of every client tick. */
     public static void tick(Minecraft minecraft) {
         ClientLevel current = minecraft.level;
