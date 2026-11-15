@@ -1,0 +1,26 @@
+# Gradle
+.gradle/
+build/
+
+# Game run directories
+run/
+runs/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# Eclipse / VS Code Java (launch.json is generated with absolute paths)
+.vscode/
+bin/
+.classpath
+.project
+.settings/
+*.launch
+
+# OS
+.DS_Store
+Thumbs.db

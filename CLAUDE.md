@@ -1,5 +1,8 @@
 # Project: Realistic Fluid & Granular Physics Mod (Multi-Loader & Multi-Version)
 
+> **Source of truth:** `Plan.md` holds the detailed specs, version cheat-sheet and the step-by-step execution order. If this file and `Plan.md` disagree, `Plan.md` wins. Work through the steps in `Plan.md` §5 sequentially, run `./gradlew build` after each, and tick the checkbox when done.
+> **Verify, don't guess:** Version numbers in `Plan.md` §1 (Fabric/NeoForge/Stonecutter) are unverified; check them against the real Maven repos before use.
+
 ## 1. Target Environment
 - **Minecraft Versions:** `1.21.1` and `1.21.11` (managed via **Stonecutter** preprocessor comments `//? if >=1.21.2` where Mojang APIs differ).
 - **Mod Loaders:** **Fabric** and **NeoForge** (MultiLoader architecture: `common`, `fabric`, `neoforge`).
@@ -10,17 +13,19 @@
 ALWAYS respect these API differences using Stonecutter conditions or helper methods:
 1. **Block/Item Properties:**
    - In `1.21.11` (`>=1.21.2`), `Item.Properties` and `BlockBehaviour.Properties` MUST call `.setId(ResourceKey)` BEFORE passing them into `new Item(...)` or `new Block(...)`.
-   - In `1.21.1`, `.setId(...)` does not exist. Always use a factory helper `RegistryHelper.createItemProperties(ResourceLocation id)`.
+   - In `1.21.1`, `.setId(...)` does not exist. Always use the factory helpers `ModRegistry.itemProps(ResourceLocation id)` / `ModRegistry.blockProps(id, base)` (see `Plan.md` §2B).
 2. **Boats (Buoyancy Mixin):**
    - In `1.21.1`, target `net.minecraft.world.entity.vehicle.Boat`.
-   - In `1.21.11`, target `net.minecraft.world.entity.vehicle.AbstractBoat`.
-3. **Rendering Hooks:**
+   - In `1.21.11`, target `net.minecraft.world.entity.vehicle.boat.AbstractBoat`.
+3. **Identifier / ResourceLocation:**
+   - `1.21.11` renamed `ResourceLocation` to `Identifier`. Write `Identifier` in sources; the string replacement in `stonecutter.gradle.kts` turns it back into `ResourceLocation` for `1.21.1` (see `Plan.md` §2A).
+4. **Rendering Hooks:**
    - Isolate vertex building and GPU instancing inside `client/render/ParticleBatchRenderer.java` so minor `BufferBuilder` / `RenderSystem` changes between `1.21.1` and `1.21.11` only touch one class.
 
 ## 3. Core Physics Architecture (Strict Performance Rules)
 1. **NEVER use Minecraft Entities (`Entity`) or Objects per Particle:**
-   - All particles live in a pre-allocated **Structure of Arrays (SoA)** inside `FluidArena` (`float[] posX, posY, posZ, velX, velY, velZ, prevX, prevY, prevZ, density, lambda; byte[] materialType; short[] sleepTimer`).
-   - Hard cap: Configurable `maxParticles` (default: `32768` on client, `8192` active simulation cells on server).
+   - All particles live in a pre-allocated **Structure of Arrays (SoA)** inside `ParticleSoA` (`float[] posX/Y/Z, prevX/Y/Z, predX/Y/Z, velX/Y/Z, lambda; byte[] material; short[] sleepTicks`; exact layout in `Plan.md` §3.1).
+   - Hard cap: `MAX_PARTICLES = 32768` (array size). Configurable runtime limit `maxParticles` via `/fluidphysics limit` (default `32768` on client; server default is a lower value, `8192`, to be tuned).
    - **Zero Heap Allocations inside the tick loop** (no `new Vec3()`, no `BlockPos` boxing—use packed `long` via `BlockPos.asLong(x, y, z)`).
 2. **Spatial Indexing (O(N) Counting-Sort Uniform Grid):**
    - Cell size `h = 0.25f` (4x4x4 cells per Minecraft block).
@@ -35,7 +40,7 @@ ALWAYS respect these API differences using Stonecutter conditions or helper meth
    - Cache nearby chunks into a compact `4x4x4` sub-voxel bitmask (`long` per block) representing solid geometry (supporting stairs, slabs, cauldrons, trapdoors). Invalidate only on `BlockUpdate`.
 5. **Strict Mass Conservation & Condensation (Anti-Lag):**
    - 1 Bucket / 1 Full Block = **64 particles** (4x4x4 sub-blocks). No infinite duplication!
-   - **Condensation (Re-Blockification):** When 64 particles of the same material rest inside a single block space (`velocity < 0.01f` for `60 ticks`), despawn those 64 particles and place the corresponding Vanilla block (or fill a Cauldron / form Obsidian).
+   - **Condensation (Re-Blockification):** When 64 particles of the same material rest inside a single block space (`sleepTicks > 60`, i.e. particle resting below the sleep velocity threshold for 60 ticks; checked once per second), despawn those 64 particles and place the corresponding Vanilla block (or fill a Cauldron / form Obsidian).
 
 ## 4. Multiplayer & Networking (`CustomPacketPayload`)
 - **NEVER send per-particle coordinates over the network!**

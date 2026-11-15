@@ -1,4 +1,4 @@
-# Implementation Plan & Technical Reference (`plan.md`)
+# Implementation Plan & Technical Reference (`Plan.md`)
 **Project:** Realistic Fluid & Granular Physics (`fluidphysics`)
 **Targets:** Minecraft `1.21.1` & `1.21.11` | Loaders: **Fabric** & **NeoForge** | Java 21 (Mojmap)
 
@@ -8,11 +8,15 @@
 
 Use **Stonecutter (`dev.kikugie.stonecutter` v0.5+)** so a single codebase compiles for all 4 targets (`1.21.1-fabric`, `1.21.1-neoforge`, `1.21.11-fabric`, `1.21.11-neoforge`).
 
+**Verified toolchain (2026-11-15, Gradle runs on JDK 21):** Gradle `9.6.1` (wrapper), Stonecutter `0.9.8`, Fabric Loom `1.17.21` (plugin id `net.fabricmc.fabric-loom-remap`, used by `common` and `fabric`), ModDevGradle `2.0.148` (`neoforge`). Stonecutter `0.10+` and Loom `1.18+` only run on JDK 25, so stay on these lines until the build JDK is upgraded.
+
+Stonecutter branches give one Gradle project per module and Minecraft version: `:common:<mc>`, `:fabric:<mc>`, `:neoforge:<mc>` (e.g. `./gradlew :fabric:1.21.1:build`). Sources live in `<module>/src`; `<module>/versions/<mc>/` only holds build output. `src/` is committed in the state of the active version `1.21.11`; code for `1.21.1` sits in Stonecutter comments.
+
 ### Directory Structure
 ```text
 fluidphysics/
 ├── CLAUDE.md
-├── plan.md
+├── Plan.md
 ├── settings.gradle.kts
 ├── stonecutter.gradle.kts
 ├── gradle.properties
@@ -20,9 +24,10 @@ fluidphysics/
 │   ├── 1.21.1/gradle.properties
 │   └── 1.21.11/gradle.properties
 ├── common/
+│   ├── build.gradle.kts
 │   └── src/main/java/dev/tore/fluidphysics/
 │       ├── FluidPhysicsCommon.java
-│       ├── platform/IPlatformHelper.java
+│       ├── platform/ (IPlatformHelper, Services)
 │       ├── registry/ModRegistry.java
 │       ├── network/ (FluidSpawnPayload, FluidImpulsePayload, FluidCondensePayload)
 │       ├── physics/ (ParticleSoA, SpatialHashGrid, ChunkVoxelCache, PbfSolver)
@@ -30,23 +35,26 @@ fluidphysics/
 │       ├── client/render/ParticleBatchRenderer.java
 │       └── mixin/ (BoatBuoyancyMixin, FallingBlockMixin, ExplosionMixin)
 ├── fabric/
+│   ├── build.gradle.kts
 │   └── src/main/java/dev/tore/fluidphysics/fabric/
 └── neoforge/
+    ├── build.gradle.kts
     └── src/main/java/dev/tore/fluidphysics/neoforge/
 ```
 
 ### Version Matrix (`versions/<ver>/gradle.properties`)
-- **Shared:** `java_version=21`
+Checked against the Fabric and NeoForge Maven repos on 2026-11-15 (latest release of each line).
+- **Shared:** `java_version=21` (root `gradle.properties`)
 - **`versions/1.21.1/gradle.properties`:**
   - `minecraft_version=1.21.1`
-  - `fabric_loader_version=0.16.9`
-  - `fabric_api_version=0.110.0+1.21.1`
-  - `neoforge_version=21.1.80`
+  - `fabric_loader_version=0.20.1`
+  - `fabric_api_version=0.116.18+1.21.1`
+  - `neoforge_version=21.1.266`
 - **`versions/1.21.11/gradle.properties`:**
   - `minecraft_version=1.21.11`
-  - `fabric_loader_version=0.16.9`
-  - `fabric_api_version=0.115.0+1.21.11`
-  - `neoforge_version=21.11.0-beta` (or latest `21.11.+` release)
+  - `fabric_loader_version=0.20.1`
+  - `fabric_api_version=0.141.6+1.21.11`
+  - `neoforge_version=21.11.48`
 
 ---
 
@@ -54,11 +62,14 @@ fluidphysics/
 
 > **CRITICAL FOR CLAUDE:** Never use 1.20.x APIs. Always use the patterns below!
 
-### A. ResourceLocation (Identical in 1.21.1 and 1.21.11)
-NEVER use `new ResourceLocation(...)` (removed in 1.21). Always use:
+### A. Identifier / ResourceLocation (renamed in `1.21.11`)
+Mojang renamed `net.minecraft.resources.ResourceLocation` to `net.minecraft.resources.Identifier` in `1.21.11`, together with every name built on it (`readResourceLocation` -> `readIdentifier`, `ResourceLocationArgument` -> `IdentifierArgument`, ...).
+Sources are written with the `1.21.11` name. `stonecutter.gradle.kts` holds one string replacement (`Identifier` -> `ResourceLocation`) that produces the `1.21.1` sources, so never branch on this by hand, and do not use the word `Identifier` in names of our own.
+Not covered by the replacement: `ResourceKey.location()` (`1.21.1`) became `ResourceKey.identifier()` (`1.21.11`).
+NEVER use `new ResourceLocation(...)` / `new Identifier(...)` (constructor is private since 1.21). Always use:
 ```java
-public static ResourceLocation id(String path) {
-    return ResourceLocation.fromNamespaceAndPath(MOD_ID, path);
+public static Identifier id(String path) {
+    return Identifier.fromNamespaceAndPath(MOD_ID, path);
 }
 ```
 
@@ -66,7 +77,7 @@ public static ResourceLocation id(String path) {
 Starting in `1.21.2+` (including `1.21.11`), calling `new Item(properties)` or `new Block(properties)` without calling `.setId(ResourceKey)` on the properties object throws `NullPointerException: Item id not set`.
 Use this exact helper in `ModRegistry.java`:
 ```java
-public static Item.Properties itemProps(ResourceLocation id) {
+public static Item.Properties itemProps(Identifier id) {
     Item.Properties props = new Item.Properties();
     //? if >=1.21.2 {
     props.setId(ResourceKey.create(Registries.ITEM, id));
@@ -74,7 +85,7 @@ public static Item.Properties itemProps(ResourceLocation id) {
     return props;
 }
 
-public static BlockBehaviour.Properties blockProps(ResourceLocation id, BlockBehaviour.Properties base) {
+public static BlockBehaviour.Properties blockProps(Identifier id, BlockBehaviour.Properties base) {
     //? if >=1.21.2 {
     base.setId(ResourceKey.create(Registries.BLOCK, id));
     //?}
@@ -84,13 +95,13 @@ public static BlockBehaviour.Properties blockProps(ResourceLocation id, BlockBeh
 
 ### C. Boat Class Hierarchy (`Boat` vs `AbstractBoat`)
 In `1.21.1`, all boats inherit from `net.minecraft.world.entity.vehicle.Boat`.
-In `1.21.11` (`>=1.21.2`), `Boat` was split into wood-specific classes inheriting from `net.minecraft.world.entity.vehicle.AbstractBoat`.
+In `1.21.11`, `Boat` is split into wood-specific classes inheriting from `net.minecraft.world.entity.vehicle.boat.AbstractBoat` (note the `boat` subpackage).
 ```java
-//? if >=1.21.2 {
-import net.minecraft.world.entity.vehicle.AbstractBoat;
+//? if >=1.21.11 {
+import net.minecraft.world.entity.vehicle.boat.AbstractBoat;
 //?} else {
-import net.minecraft.world.entity.vehicle.Boat;
-//?}
+/*import net.minecraft.world.entity.vehicle.Boat;
+*///?}
 ```
 In Mixins or buoyancy checks, wrap the target class with Stonecutter comments so both versions compile cleanly.
 
@@ -233,8 +244,63 @@ Run `SUBSTEPS = 2` per game tick (`dt = 0.025f` per substep):
 
 Execute these steps sequentially and run `./gradlew build` after each step:
 
-- [ ] **Step 1 (Scaffold):** Set up Stonecutter + MultiLoader (`common`, `fabric`, `neoforge`) for `1.21.1` and `1.21.11`. Implement `IPlatformHelper` and `ModRegistry` with the `.setId()` version check. Verify build passes for all 4 targets.
-- [ ] **Step 2 (Physics Core & Unit Test):** Implement `ParticleSoA`, `SpatialHashGrid`, `ChunkVoxelCache` (64-bit `long` sub-voxels), and `PbfSolver`. Create `PbfSolverTest.java` in `common/src/test/java/` simulating 16,384 particles for 100 steps and assert execution time is under 3.5 ms per step with zero heap allocations.
+- [x] **Step 1 (Scaffold):** Set up Stonecutter + MultiLoader (`common`, `fabric`, `neoforge`) for `1.21.1` and `1.21.11`. Implement `IPlatformHelper` and `ModRegistry` with the `.setId()` version check. Verify build passes for all 4 targets.
+- [ ] **Step 2 (Physics Core & Unit Test):** Implement `ParticleSoA`, `SpatialHashGrid`, `ChunkVoxelCache` (64-bit `long` sub-voxels), and `PbfSolver`. Create `PbfSolverTest.java` in `common/src/test/java/` simulating 16,384 particles for 100 steps and assert execution time is under 3.5 ms per step (median after JIT warm-up, generous tolerance for CI noise) and verify zero heap allocations (e.g. via `ThreadMXBean.getThreadAllocatedBytes` delta around the step loop).
 - [ ] **Step 3 (Networking & Commands):** Implement `FluidSpawnPayload`, `FluidImpulsePayload`, `FluidCondensePayload`, and `/fluidphysics (stats|clear|spawn|limit)`.
 - [ ] **Step 4 (Client Batch Renderer):** Implement `ParticleBatchRenderer` rendering instanced/batched micro-cubes (`0.22f` size) with velocity-based foam coloring for water, temperature glow for lava, translucent bouncy tint for slime, and grain shading for sand.
 - [ ] **Step 5 (Items & World Interactions):** Add Physics Buckets, Crumbling Sand Block, Cauldron filling, Water+Lava Obsidian reaction, Condensation back to Vanilla blocks, and Boat/Anvil/TNT Mixins.
+
+---
+
+## 6. Performance & RAM Optimization Roadmap (Server + Client)
+
+> Apply **after** Step 5 works correctly. Measure first (`/fluidphysics stats`: step ms, active particles, grid rebuild ms, bytes/tick allocated), optimize second. Every optimization needs a before/after number in `PbfSolverTest` or a JMH benchmark.
+
+### 6.1 Shared (common/physics) – CPU
+1. **Z-order (Morton) particle sorting:** Every ~8–16 ticks, reorder the SoA arrays by cell Morton code (reuse the counting-sort result). Neighbor particles end up adjacent in memory, so the cache-miss rate drops sharply. Ref: Ihmsen et al., *"A Parallel SPH Implementation on Multi-Core CPUs"* (Freiburg, compact hashing + Z-index sort), https://cg.informatik.uni-freiburg.de/publications/2011_CGF_dataStructuresSPH.pdf
+2. **Compact / sparse grid:** Instead of a fixed 65536 hash table, only iterate non-empty cells (compact list of occupied cells). Same source as above.
+3. **Neighbor list caching:** Build the neighbor list once per substep (`int[] neighborStart, int[] neighborIdx`, pre-allocated, capped at e.g. 48 neighbors per particle) and reuse it for all PBF solver iterations instead of re-walking 27 cells each iteration.
+4. **SIMD (Java Vector API, `jdk.incubator.vector`) – optional, behind a feature flag:** SoA layout is already SIMD-friendly. Vectorize integration, XSPH viscosity, and lambda/delta-position loops. Needs `--add-modules jdk.incubator.vector`, so provide a scalar fallback (ServiceLoader). Reference experience: single-thread SIMD beat naive multi-threading for PBF (https://github.com/yoharol/High_Performance_PBD_Fluids). Only parallelize loops where each iteration is heavy.
+5. **Parallelism strategy:** Use one dedicated physics thread (not the main tick thread) with double-buffered positions: the physics thread writes buffer A while the render/tick thread reads buffer B; swap per tick. Parallelize only the heavy parts (neighbor search, density solve) with a small fixed `ForkJoinPool`/chunked ranges; no per-tick lambda allocations.
+6. **Adaptive substeps / adaptive resolution:** Fewer substeps (1 instead of 2–3) and a coarser solver for distant clusters. Ref: *Adaptive Position-Based Fluids* (https://arxiv.org/pdf/1608.04721).
+7. **Sleeping islands:** Particles with `sleepTicks > N` are excluded from the solver and only kept in the grid as static neighbors. Wake them via `FluidImpulse` or block updates in a radius. Fully sleeping clusters are cheaply condensed into vanilla blocks (already in §4.2).
+8. **Spatial budgets:** Hard per-tick time budget (e.g. 3.5 ms server / 2 ms client). If exceeded, reduce substeps, then solver iterations, then force earlier condensation, never drop ticks. Only simulate chunks within `simulationDistance` of a player; freeze the rest.
+9. **Float-only math, no `Math.pow`/`sqrt` in hot loops:** Precompute kernel tables/constants; use fast inverse-sqrt-free formulations (compare squared distances first).
+
+### 6.2 Shared – RAM
+1. **Allocation size is fixed and small:** All SoA arrays at `MAX_PARTICLES = 32768` ≈ 15 float arrays × 128 KB + small arrays ≈ **2 MB**. Allocate lazily (only when the first particle spawns) and free after N idle minutes. Server uses the lower `maxParticles` (8192) → allocate arrays by that limit, not by the max.
+2. **Drop redundant arrays:** `prev*` and `pred*` can share one scratch buffer pair when XPBD does not need both; `lambda` can be recomputed per iteration. Evaluate with a memory/accuracy test.
+3. **Quantization for sleeping/network/render data:** Store render snapshots as `short` (fixed-point 1/1024 block relative to chunk origin) → 6 bytes/particle instead of 12.
+4. **`ChunkVoxelCache` memory cap:** LRU eviction with a hard cap (e.g. 4096 blocks → `Long2LongOpenHashMap` ≈ 100 KB); only cache blocks that are **non-air and adjacent to a non-solid cell** that particles can reach. Full-cube/air are derived from a 2-bit-per-block "type" table instead of a `long`. Deduplicate identical `long` shape masks per `BlockState` (cache per state, not per position).
+5. **No object churn:** Pool/reuse command and event objects; reuse payload builders; never allocate in `tick`, `render`, or networking send paths (verify with `ThreadMXBean.getThreadAllocatedBytes`, see Step 2).
+6. **Use fastutil primitive collections only** (`Long2LongOpenHashMap`, `LongArrayList`), never `HashMap<Long, …>`.
+
+### 6.3 Server-side
+1. **Server particle cap & tick budget:** `maxParticles` default 8192 (see CLAUDE.md), configurable per dimension; spawn requests beyond the cap trigger forced condensation of the oldest sleeping groups first.
+2. **Authoritative low-res sim:** The server may simulate with a coarser step (`SUBSTEPS = 1`, fewer iterations) because clients simulate the visuals; the server only needs positions of particles that influence gameplay (entity buoyancy, condensation, cauldrons, obsidian reaction). Clients run a deterministic-enough local sim driven by Spawn/Impulse/Condense events.
+3. **Event + coarse-grid sync only:** Batch all payloads of a tick into one packet per player; send only to players within view distance (`PacketDistributor` / tracking-chunk based). Rate-limit impulses (merge impulses in the same tick and 2-block cell). Periodic resync: one coarse-grid hash (particle counts per block) every few seconds, not particle positions.
+4. **Off-thread condensation/scans:** The once-per-second condensation scan runs on the physics thread over the grid (counts per block); only the final `level.setBlock` happens on the main thread via a pre-allocated queue.
+5. **Chunk unload handling:** Freeze and serialize particles of unloaded chunks as a compact count-per-block record, or condense them into vanilla blocks immediately. Never keep simulating unloaded areas.
+6. **Entity interaction sampling:** Boats/entities query the **grid** (cell counts) with O(1) lookups at 4 points, never iterate all particles.
+
+### 6.4 Client-side
+1. **Instanced rendering:** One draw call for all particles per material using instanced micro-cubes (per-instance data: position `3×short`/`float`, packed color/material `int`). Isolated in `ParticleBatchRenderer` (see CLAUDE.md §2.4). Fallback path for 1.21.1 / without instancing: a single persistent, pre-allocated `ByteBuffer` + one `BufferBuilder`/`MeshData` upload per frame. Similar goals to the *ImmediatelyFast* mod (batching draw calls for particles/entities), which is a good reference for how to hook the render pipeline without breaking Sodium compatibility.
+2. **Persistent mapped / reused GPU buffers:** Allocate the instance VBO once at max size, update with `glBufferSubData`/orphaning (double/triple buffering). No per-frame buffer creation.
+3. **Culling & LOD:** Frustum-cull by cell/cluster; fully interior particles (all 6 neighbors occupied) are not rendered; far clusters collapse to a lower-detail representation (larger merged quads, or the vanilla fluid/block model once condensed). Distance-based skipping of small foam details.
+4. **Render interpolation, not simulation upsampling:** Simulate at 20 TPS (+substeps); interpolate positions with `partialTick` between `prev` and current instead of running more steps. Store render snapshots in a separate pre-allocated buffer (double buffered).
+5. **Sodium/Embeddium/Iris compatibility:** Render in `AfterTranslucentParticles` / the loader render event only; do not touch chunk meshing. Avoid depth/blend state leaks (restore state after drawing).
+6. **Client sim budget:** The client has its own adaptive budget; if `frameTime` rises above a threshold, reduce render distance of particles and substeps before dropping to a lower `maxParticles` (client option in config, default 32768).
+7. **Shader-free "cheap mode":** An option to render sprites/billboards (4 vertices) or even points instead of cubes (12 triangles) → ~3–6× less vertex work for low-end GPUs.
+
+### 6.5 Measurement & Regression Guards
+- JMH benchmark module (`common/src/jmh`) for: grid rebuild, neighbor build, density solve, collision. Track ms/step at 4k / 16k / 32k particles.
+- `/fluidphysics stats` shows: step ms (avg/p99), grid ms, neighbors/particle, active/sleeping count, voxel-cache size, bytes allocated per tick, last packet size.
+- CI test gates: <3.5 ms/step @16k particles (Step 2), zero allocations per step, voxel cache ≤ configured cap.
+- Use Spark (profiler) on server and client for real-world validation; record results in `docs/perf/`.
+
+### 6.6 Suggested Order
+- [ ] **Step 6a:** Stats/profiling hooks + JMH baseline.
+- [ ] **Step 6b:** Neighbor list caching, Morton re-sorting, sleeping islands, time budget.
+- [ ] **Step 6c:** Instanced rendering, GPU buffer reuse, culling/LOD, interpolation.
+- [ ] **Step 6d:** Network batching/rate limits, chunk-unload handling, voxel-cache LRU.
+- [ ] **Step 6e (optional):** Vector API path + physics thread with double buffering.

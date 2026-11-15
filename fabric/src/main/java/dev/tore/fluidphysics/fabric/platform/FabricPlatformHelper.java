@@ -1,0 +1,21 @@
+package dev.tore.fluidphysics.fabric.platform;
+
+import dev.tore.fluidphysics.platform.IPlatformHelper;
+import net.fabricmc.loader.api.FabricLoader;
+
+public final class FabricPlatformHelper implements IPlatformHelper {
+    @Override
+    public String getPlatformName() {
+        return "Fabric";
+    }
+
+    @Override
+    public boolean isModLoaded(String modId) {
+        return FabricLoader.getInstance().isModLoaded(modId);
+    }
+
+    @Override
+    public boolean isDevelopmentEnvironment() {
+        return FabricLoader.getInstance().isDevelopmentEnvironment();
+    }
+}
