@@ -48,6 +48,8 @@ ALWAYS respect these API differences using Stonecutter conditions or helper meth
   - `FluidSpawnPayload(long packedBlockPos, byte materialType, short count, float dirX, float dirY, float dirZ)`
   - `FluidImpulsePayload(float x, float y, float z, float radius, float force)` (for TNT, falling anvils, pistons, players jumping in)
   - `FluidCondensePayload(long packedBlockPos, byte materialType, short removedCount)`
+  - `FluidClearPayload()` (for `/fluidphysics clear`)
+- Server code changes particles only through `server/ServerSimulations`, which applies the change and sends the matching event.
 
 ## License & Clean-Room Policy
 - The project is licensed under `Apache-2.0` (`Copyright 2026 Papxx`). `LICENSE` and `NOTICE` live in the repo root and are packed into the root of every built jar.

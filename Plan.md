@@ -142,6 +142,12 @@ public record FluidSpawnPayload(
     public Type<? extends CustomPacketPayload> type() { return TYPE; }
 }
 ```
+*Implemented in Step 3:* packed block positions use a fixed 8-byte codec (`FluidStreamCodecs.PACKED_POS`, like vanilla's `BlockPos.STREAM_CODEC`) instead of `VAR_LONG`. `ByteBufCodecs.LONG` does not exist in 1.21.1, and `VAR_LONG` needs up to 10 bytes because packed positions keep x in the highest bits.
+
+### F. Permissions, World Height & Dimension Names (verified 2026-11-15 in the official mappings)
+- **Command permissions:** 1.21.11 replaced the integer levels with permission sets (`net.minecraft.server.permissions`). `>=1.21.11`: `.requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))`. Older: `.requires(source -> source.hasPermission(Commands.LEVEL_GAMEMASTERS))` (`LEVEL_GAMEMASTERS` is an `int` there). 1.21.10 still has `hasPermission(int)`.
+- **World bottom:** `LevelHeightAccessor.getMinBuildHeight()` became `getMinY()` in 1.21.2 (`//? if >=1.21.2`).
+- **Dimension id:** `level.dimension().location()` (1.21.1) became `.identifier()` (1.21.11), together with the `Identifier` rename (§2A).
 
 ---
 
@@ -250,7 +256,13 @@ Execute these steps sequentially and run `./gradlew build` after each step:
 - [x] **Step 1 (Scaffold):** Set up Stonecutter + MultiLoader (`common`, `fabric`, `neoforge`) for `1.21.1` and `1.21.11`. Implement `IPlatformHelper` and `ModRegistry` with the `.setId()` version check. Verify build passes for all 4 targets.
 - [x] **Step 2 (Physics Core & Unit Test):** Implement `ParticleSoA`, `SpatialHashGrid`, `ChunkVoxelCache` (64-bit `long` sub-voxels), and `PbfSolver`. Create `PbfSolverTest.java` in `common/src/test/java/` simulating 16,384 particles for 100 steps and assert execution time is under 3.5 ms per step (median after JIT warm-up, generous tolerance for CI noise) and verify zero heap allocations (e.g. via `ThreadMXBean.getThreadAllocatedBytes` delta around the step loop).
   - **Done (2026-11-15)** with one accepted deviation: the 3.5 ms target is not met yet. On a 6-core/12-thread desktop the median is about 5 ms per tick with 6 threads (about 19 ms on one thread). The test reports the target and enforces 8 ms as a regression guard; reaching 3.5 ms moved to Step 6b. Zero allocations are verified on the calling thread and on all worker threads.
-- [ ] **Step 3 (Networking & Commands):** Implement `FluidSpawnPayload`, `FluidImpulsePayload`, `FluidCondensePayload`, and `/fluidphysics (stats|clear|spawn|limit)`.
+- [x] **Step 3 (Networking & Commands):** Implement `FluidSpawnPayload`, `FluidImpulsePayload`, `FluidCondensePayload`, and `/fluidphysics (stats|clear|spawn|limit)`.
+  - **Done (2026-11-15).** `physics/FluidSimulation` holds one level's particles, voxel cache and solver. `server/ServerSimulations` keeps one simulation per `ServerLevel` and is the only server entry point that changes particles (`spawn`, `impulse`, `condense`, `clear`): it applies each change and sends the event to the players tracking the chunk (`chunkMap.getPlayers`, the lookup Fabric and NeoForge use themselves). `client/ClientSimulation` simulates the client's current level from these events only. Both tick after the level tick, stop under `/tick freeze`, and the client also stops while the game is paused.
+  - Added a fourth payload, `FluidClearPayload` (no data), so `/fluidphysics clear` also clears the clients.
+  - Memory is allocated lazily: nothing until the first spawn, then 4096 particles, doubling up to the limit; `clear` frees it. The server limit applies per dimension and resets when the server stops. Lowering it keeps existing particles (clients still simulate them) and only blocks new spawns. Particles 16 blocks below the world bottom are removed.
+  - Commands (permission level 2): `stats`, `clear`, `spawn <water|lava|slime|sand> [blocks 1-512] [pos]` (a cube of blocks centred on `pos`, growing upward; solid and unloaded blocks are skipped), `limit [0-32768]`.
+  - Verified: `./gradlew build` (68 tests, including codec round trips and zero allocations for tick, impulse and condense) and all commands over RCON on the NeoForge dev servers for 1.21.1 and 1.21.11. Fabric servers initialise on both versions but stop at the EULA, so the commands were not run there. The client side has not been run in game yet (nothing renders before Step 4).
+  - Open for later steps: a client that joins after particles spawned does not see them (periodic resync, §6.3.3); the voxel cache is only refreshed when a simulation starts empty (block-update hooks, §7.3); spawns more than 4096 blocks from the existing particles of a dimension are refused (one float origin per simulation).
 - [ ] **Step 4 (Client Batch Renderer):** Implement `ParticleBatchRenderer` rendering instanced/batched micro-cubes (`0.22f` size) with velocity-based foam coloring for water, temperature glow for lava, translucent bouncy tint for slime, and grain shading for sand.
 - [ ] **Step 5 (Items & World Interactions):** Add Physics Buckets, Crumbling Sand Block, Cauldron filling, Water+Lava Obsidian reaction, Condensation back to Vanilla blocks, and Boat/Anvil/TNT Mixins.
 

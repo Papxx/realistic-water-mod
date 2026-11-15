@@ -196,6 +196,36 @@ public final class ParticleSoA {
         activeCount = 0;
     }
 
+    /**
+     * Replaces this instance's particles and origin with copies of {@code source}'s, e.g. to move them into larger
+     * arrays. The runtime limit of this instance is not changed.
+     */
+    public void copyFrom(ParticleSoA source) {
+        int n = source.activeCount;
+        if (n > capacity) {
+            throw new IllegalArgumentException("source holds " + n + " particles, capacity is " + capacity);
+        }
+        System.arraycopy(source.posX, 0, posX, 0, n);
+        System.arraycopy(source.posY, 0, posY, 0, n);
+        System.arraycopy(source.posZ, 0, posZ, 0, n);
+        System.arraycopy(source.prevX, 0, prevX, 0, n);
+        System.arraycopy(source.prevY, 0, prevY, 0, n);
+        System.arraycopy(source.prevZ, 0, prevZ, 0, n);
+        System.arraycopy(source.predX, 0, predX, 0, n);
+        System.arraycopy(source.predY, 0, predY, 0, n);
+        System.arraycopy(source.predZ, 0, predZ, 0, n);
+        System.arraycopy(source.velX, 0, velX, 0, n);
+        System.arraycopy(source.velY, 0, velY, 0, n);
+        System.arraycopy(source.velZ, 0, velZ, 0, n);
+        System.arraycopy(source.lambda, 0, lambda, 0, n);
+        System.arraycopy(source.material, 0, material, 0, n);
+        System.arraycopy(source.sleepTicks, 0, sleepTicks, 0, n);
+        activeCount = n;
+        originX = source.originX;
+        originY = source.originY;
+        originZ = source.originZ;
+    }
+
     /** Sets the origin without moving anything; only valid while no particles exist. */
     public void setOrigin(int x, int y, int z) {
         if (activeCount != 0) {

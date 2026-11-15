@@ -16,6 +16,9 @@
   "entrypoints": {
     "main": [
       "dev.tore.fluidphysics.fabric.FluidPhysicsFabric"
+    ],
+    "client": [
+      "dev.tore.fluidphysics.fabric.FluidPhysicsFabricClient"
     ]
   },
   "depends": {

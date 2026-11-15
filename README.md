@@ -4,7 +4,7 @@
 
 Realistic Fluid & Granular Physics (`fluidphysics`) replaces Minecraft's cellular fluids and falling-sand behaviour with a real-time, particle-based simulation. Liquids flow around obstacles, spray from pipes, burst through broken dams and settle into piles, all while staying fast enough for multiplayer.
 
-> **Status:** early development (v0.1.0). The build scaffold and the physics core (solver, spatial grid, voxel collision) are in place and covered by unit tests. Nothing runs in game yet: networking, rendering, items and world hooks come next. The features below describe the design targets. See [Plan.md](Plan.md) for the detailed specification and progress.
+> **Status:** early development (v0.1.0). The physics core (solver, spatial grid, voxel collision), the network events and the `/fluidphysics` command are in place and covered by unit tests. Particles can be spawned and simulated on servers, but they are not rendered yet: rendering, items and world hooks come next. The features below describe the design targets. See [Plan.md](Plan.md) for the detailed specification and progress.
 
 ## Supported platforms
 
@@ -64,15 +64,19 @@ Requires Java 21. The mod uses the official Mojang mappings, has no heavy runtim
 
 ## Multiplayer
 
-Particle positions are never sent over the network. The server sends only small events (spawn, impulse and condense) and each client simulates its own particles. This keeps bandwidth tiny even with thousands of particles.
+Particle positions are never sent over the network. The server sends only small events (spawn, impulse, condense and clear, 0 to 23 bytes each) to the players who can see where they happen, and each client simulates its own particles. This keeps bandwidth tiny even with thousands of particles.
 
 ## Commands
 
+All subcommands need operator rights (permission level 2) and act on your current dimension.
+
 ```
-/fluidphysics stats            Show particle counts and solver timings
-/fluidphysics clear            Remove all particles
-/fluidphysics spawn <material> Spawn particles at your position
-/fluidphysics limit <n>        Set the maximum particle count
+/fluidphysics stats                         Show particle counts and solver timings
+/fluidphysics clear                         Remove all particles
+/fluidphysics spawn <material> [blocks] [pos]
+                                            Fill blocks with particles (64 per block) at your position or pos
+                                            material: water, lava, slime or sand; blocks: 1 to 512
+/fluidphysics limit [n]                     Show or set the particle limit per dimension (0 to 32768)
 ```
 
 ## Building

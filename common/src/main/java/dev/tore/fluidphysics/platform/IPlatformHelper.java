@@ -1,4 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0
 package dev.tore.fluidphysics.platform;
+
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.server.level.ServerPlayer;
 
 /**
  * Everything common code needs from the mod loader. Each loader module provides one implementation,
@@ -11,4 +15,10 @@ public interface IPlatformHelper {
     boolean isModLoaded(String modId);
 
     boolean isDevelopmentEnvironment();
+
+    /**
+     * Sends a registered clientbound payload to one player. Players whose client can not receive it (no mod installed)
+     * are skipped.
+     */
+    void sendToPlayer(ServerPlayer player, CustomPacketPayload payload);
 }

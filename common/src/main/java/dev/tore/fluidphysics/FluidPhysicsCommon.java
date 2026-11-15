@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 package dev.tore.fluidphysics;
 
 import com.mojang.logging.LogUtils;

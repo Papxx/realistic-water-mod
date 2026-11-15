@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 package dev.tore.fluidphysics.platform;
 
 import java.util.ServiceLoader;
