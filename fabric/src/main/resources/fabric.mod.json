@@ -8,6 +8,10 @@
     "${mod_author}"
   ],
   "license": "${mod_license}",
+  "contact": {
+    "homepage": "${mod_homepage}",
+    "sources": "${mod_homepage}"
+  },
   "environment": "*",
   "entrypoints": {
     "main": [

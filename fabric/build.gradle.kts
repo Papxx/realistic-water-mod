@@ -57,6 +57,7 @@ tasks.processResources {
         "mod_version" to version.toString(),
         "mod_author" to prop("mod_author"),
         "mod_license" to prop("mod_license"),
+        "mod_homepage" to prop("mod_homepage"),
         "mod_description" to prop("mod_description"),
         "minecraft_version" to prop("minecraft_version"),
         "fabric_loader_version" to prop("fabric_loader_version"),
@@ -64,4 +65,9 @@ tasks.processResources {
     )
     inputs.properties(metadata)
     filesMatching("fabric.mod.json") { expand(metadata) }
+}
+
+// Apache-2.0 §4: ship LICENSE and NOTICE in the root of every jar.
+tasks.jar {
+    from(rootProject.file("LICENSE"), rootProject.file("NOTICE"))
 }

@@ -19,10 +19,28 @@ dependencies {
     // Vanilla Minecraft only: nothing loader-specific may leak into common code.
     minecraft("com.mojang:minecraft:${prop("minecraft_version")}")
     mappings(loom.officialMojangMappings())
+
+    testImplementation(platform("org.junit:junit-bom:${prop("junit_version")}"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
+}
+
+tasks.test {
+    useJUnitPlatform()
+    // The solver benchmark needs a stable heap; keep the fork small but fixed.
+    maxHeapSize = "1G"
+    // Minecraft's bootstrap (ChunkVoxelCacheTest) writes logs/ into the working directory; keep it inside build/.
+    val runDir = layout.buildDirectory.dir("test-run")
+    workingDir(runDir)
+    doFirst { runDir.get().asFile.mkdirs() }
+    testLogging {
+        events("passed", "skipped", "failed")
+        showStandardStreams = true
+    }
 }
 
 // The loader modules compile the common sources together with their own, so hand them the source
@@ -41,4 +59,9 @@ artifacts {
     val main = sourceSets.main.get()
     main.java.srcDirs.forEach { add(commonJava.name, it) { builtBy(generate) } }
     main.resources.srcDirs.forEach { add(commonResources.name, it) { builtBy(generate) } }
+}
+
+// Apache-2.0 §4: ship LICENSE and NOTICE in the root of every jar.
+tasks.jar {
+    from(rootProject.file("LICENSE"), rootProject.file("NOTICE"))
 }

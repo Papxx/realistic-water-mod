@@ -1,0 +1,9 @@
+Realistic Water & Fluid Physics Mod
+Copyright 2026 Papxx (https://github.com/Papxx/realistic-water-mod)
+
+Licensed under the Apache License, Version 2.0.
+
+This product includes clean-room Position Based Fluids (PBF), viscoelastic, and granular physics implementations developed from scratch for Minecraft 1.21.1 and 1.21.11 (Fabric & NeoForge).
+
+Gameplay concept inspired by Realistic Water by Skaffy (https://github.com/sskaffy/Realistic-Water).
+No source code, shaders, or assets from the original mod are included in this project.

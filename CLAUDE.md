@@ -28,7 +28,7 @@ ALWAYS respect these API differences using Stonecutter conditions or helper meth
    - Hard cap: `MAX_PARTICLES = 32768` (array size). Configurable runtime limit `maxParticles` via `/fluidphysics limit` (default `32768` on client; server default is a lower value, `8192`, to be tuned).
    - **Zero Heap Allocations inside the tick loop** (no `new Vec3()`, no `BlockPos` boxing—use packed `long` via `BlockPos.asLong(x, y, z)`).
 2. **Spatial Indexing (O(N) Counting-Sort Uniform Grid):**
-   - Cell size `h = 0.25f` (4x4x4 cells per Minecraft block).
+   - Grid cell size = smoothing radius `h = 0.35f`, so the 27-cell neighbour search is exact. The 0.25 sub-voxel (4x4x4 per block) is the collision unit of `ChunkVoxelCache` (see `Plan.md` §3.2).
    - Use a flat 1D hash table with prefix-sum counting sort (`cellCount[]`, `cellStart[]`, `sortedParticleIndices[]`) rebuilt every sub-step without memory allocation.
 3. **Unified PBD / PBF Solver (2–3 Substeps per Tick):**
    - **Water (`MATERIAL_WATER = 0`):** Position Based Fluids (PBF) density constraint, low viscosity (`0.02`), buoyancy on entities, splashes at high velocity.
@@ -48,3 +48,9 @@ ALWAYS respect these API differences using Stonecutter conditions or helper meth
   - `FluidSpawnPayload(long packedBlockPos, byte materialType, short count, float dirX, float dirY, float dirZ)`
   - `FluidImpulsePayload(float x, float y, float z, float radius, float force)` (for TNT, falling anvils, pistons, players jumping in)
   - `FluidCondensePayload(long packedBlockPos, byte materialType, short removedCount)`
+
+## License & Clean-Room Policy
+- The project is licensed under `Apache-2.0` (`Copyright 2026 Papxx`). `LICENSE` and `NOTICE` live in the repo root and are packed into the root of every built jar.
+- **Strict clean-room rule:** Under no circumstances may source code, shader code or texture material from other mods (in particular `sskaffy/Realistic-Water`) be copied. All algorithms, shaders and assets must be implemented 100 % independently or generated procedurally.
+- Every new Java source file starts with the short SPDX header:
+  `// SPDX-License-Identifier: Apache-2.0`

@@ -72,10 +72,16 @@ tasks.processResources {
         "mod_version" to version.toString(),
         "mod_author" to prop("mod_author"),
         "mod_license" to prop("mod_license"),
+        "mod_homepage" to prop("mod_homepage"),
         "mod_description" to prop("mod_description"),
         "minecraft_version" to prop("minecraft_version"),
         "neoforge_version" to prop("neoforge_version"),
     )
     inputs.properties(metadata)
     filesMatching("META-INF/neoforge.mods.toml") { expand(metadata) }
+}
+
+// Apache-2.0 §4: ship LICENSE and NOTICE in the root of every jar.
+tasks.jar {
+    from(rootProject.file("LICENSE"), rootProject.file("NOTICE"))
 }
