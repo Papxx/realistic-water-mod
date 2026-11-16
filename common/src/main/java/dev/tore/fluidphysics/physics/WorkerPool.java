@@ -64,6 +64,18 @@ public final class WorkerPool implements AutoCloseable {
         return size;
     }
 
+    /**
+     * Bytes the worker threads (not the calling thread) allocated since they started, see {@link AllocationMeter}.
+     * Allocates nothing.
+     */
+    public long workerAllocatedBytes() {
+        long sum = 0L;
+        for (Thread worker : workers) {
+            sum += AllocationMeter.threadBytes(worker.threadId());
+        }
+        return sum;
+    }
+
     /** How many shares {@link #run} splits a range of {@code n} into: workers {@code 0..sharesFor(n)-1} take part. */
     public int sharesFor(int n) {
         return n < MIN_PARALLEL_RANGE ? 1 : size;

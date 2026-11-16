@@ -5,8 +5,10 @@ import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
 import dev.tore.fluidphysics.client.ClientSimulation;
+import dev.tore.fluidphysics.physics.AllocationMeter;
 import dev.tore.fluidphysics.physics.FluidSimulation;
 import dev.tore.fluidphysics.physics.ParticleSoA;
+import dev.tore.fluidphysics.physics.RollingSamples;
 import it.unimi.dsi.fastutil.HashCommon;
 import java.util.Arrays;
 import net.minecraft.client.Camera;
@@ -50,6 +52,8 @@ public final class ParticleBatchRenderer {
      * precision; the lava flicker skips once per hour.
      */
     private static final long CLOCK_WRAP_TICKS = 72_000L;
+    /** Frames covered by the render statistics: 4 seconds at 60 frames per second. */
+    public static final int STATS_FRAMES = 240;
 
     private static final ParticleMesher MESHER = new ParticleMesher();
     private static final BlockCache BLOCKS = new BlockCache();
@@ -57,7 +61,11 @@ public final class ParticleBatchRenderer {
     /** Native vertex memory, kept between frames; freed when the simulation frees its particles. */
     private static ByteBufferBuilder buffer;
     private static int lastDrawn;
-    private static long lastFrameNanos;
+    private static int lastVertices;
+    /** Per frame with particles: CPU time of {@link #render()}, of its meshing part, and bytes it allocated. */
+    private static final RollingSamples FRAME_NANOS = new RollingSamples(STATS_FRAMES);
+    private static final RollingSamples MESH_NANOS = new RollingSamples(STATS_FRAMES);
+    private static final RollingSamples FRAME_ALLOCATED = new RollingSamples(STATS_FRAMES);
 
     private ParticleBatchRenderer() {
     }
@@ -69,8 +77,12 @@ public final class ParticleBatchRenderer {
         FluidSimulation simulation = ClientSimulation.currentFor(level);
         ParticleSoA particles = simulation == null ? null : simulation.particles();
         lastDrawn = 0;
+        lastVertices = 0;
         if (particles == null) {
             releaseBuffer();
+            FRAME_NANOS.clear();
+            MESH_NANOS.clear();
+            FRAME_ALLOCATED.clear();
             return;
         }
         Camera camera = minecraft.gameRenderer.getMainCamera();
@@ -78,6 +90,8 @@ public final class ParticleBatchRenderer {
             return;
         }
         long start = System.nanoTime();
+        long allocatedBefore = AllocationMeter.currentThreadBytes();
+        long meshNanos = 0L;
         // Frozen with /tick freeze, this is 1: the particles do not tick either and sit at their current positions.
         float partialTick = partialTick(minecraft);
         //? if >=1.21.11 {
@@ -96,17 +110,23 @@ public final class ParticleBatchRenderer {
             }
             BufferBuilder builder = new BufferBuilder(buffer, type.mode(), type.format());
             SINK.builder = builder;
+            SINK.vertices = 0;
             BLOCKS.begin(level);
             MESHER.emit(particles, BLOCKS, SINK, (level.getGameTime() % CLOCK_WRAP_TICKS) + partialTick);
             BLOCKS.end();
             SINK.builder = null;
+            lastVertices = SINK.vertices;
+            meshNanos = System.nanoTime() - start;
             MeshData mesh = builder.build();
             if (mesh != null) {
                 type.draw(mesh); // uploads, draws and closes the mesh, which hands the memory back to the buffer
             }
         }
         lastDrawn = count;
-        lastFrameNanos = System.nanoTime() - start;
+        long end = System.nanoTime();
+        FRAME_NANOS.add(end - start);
+        MESH_NANOS.add(count > 0 ? meshNanos : end - start);
+        FRAME_ALLOCATED.add(AllocationMeter.currentThreadBytes() - allocatedBefore);
     }
 
     /** Particles drawn in the last frame (after culling). */
@@ -114,9 +134,24 @@ public final class ParticleBatchRenderer {
         return lastDrawn;
     }
 
-    /** CPU time of the last frame that drew particles, in nanoseconds: meshing, upload and draw call. */
-    public static long lastFrameNanos() {
-        return lastFrameNanos;
+    /** Vertices written in the last frame. */
+    public static int lastVertices() {
+        return lastVertices;
+    }
+
+    /** CPU time of the last {@link #STATS_FRAMES} frames with particles: meshing, upload and draw call. */
+    public static RollingSamples frameNanos() {
+        return FRAME_NANOS;
+    }
+
+    /** The meshing part of {@link #frameNanos()}: interpolation, culling, sorting, colours and vertices. */
+    public static RollingSamples meshNanos() {
+        return MESH_NANOS;
+    }
+
+    /** Heap bytes the render thread allocated in {@link #render()}, per frame with particles. */
+    public static RollingSamples frameAllocated() {
+        return FRAME_ALLOCATED;
     }
 
     private static void releaseBuffer() {
@@ -145,10 +180,12 @@ public final class ParticleBatchRenderer {
     /** Writes the mesher's vertices into the frame's buffer. */
     private static final class BufferSink implements ParticleMesher.VertexSink {
         BufferBuilder builder;
+        int vertices;
 
         @Override
         public void vertex(float x, float y, float z, int argb, int packedLight) {
             builder.addVertex(x, y, z).setColor(argb).setLight(packedLight);
+            vertices++;
         }
     }
 

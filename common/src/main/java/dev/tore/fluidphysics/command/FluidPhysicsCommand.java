@@ -4,11 +4,11 @@ package dev.tore.fluidphysics.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import dev.tore.fluidphysics.network.FluidNetworking;
 import dev.tore.fluidphysics.physics.FluidSimulation;
 import dev.tore.fluidphysics.physics.MaterialProperties;
 import dev.tore.fluidphysics.physics.ParticleSoA;
 import dev.tore.fluidphysics.server.ServerSimulations;
-import java.util.Locale;
 import java.util.function.Predicate;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -53,15 +53,6 @@ public final class FluidPhysicsCommand {
         dispatcher.register(Commands.literal("fluidphysics")
                 .requires(GAME_MASTER)
                 .then(Commands.literal("stats").executes(ctx -> stats(ctx.getSource())))
-                // TEMPORARY test hook, not to be committed.
-                .then(Commands.literal("debuguse").executes(ctx -> {
-                    net.minecraft.server.level.ServerPlayer player = ctx.getSource().getPlayerOrException();
-                    net.minecraft.world.InteractionResult result = player.gameMode.useItem(player, player.level(),
-                            player.getMainHandItem(), net.minecraft.world.InteractionHand.MAIN_HAND);
-                    ctx.getSource().sendSuccess(() -> Component.literal("debuguse " + result + " -> "
-                            + player.getMainHandItem()), false);
-                    return 1;
-                }))
                 .then(Commands.literal("clear").executes(ctx -> clear(ctx.getSource())))
                 .then(spawn)
                 .then(Commands.literal("limit")
@@ -142,29 +133,19 @@ public final class FluidPhysicsCommand {
         FluidSimulation simulation = ServerSimulations.getIfPresent(level);
         String dimension = dimensionName(level);
         int total = ServerSimulations.totalParticles();
+        String network = StatsReport.networkLine(FluidNetworking.sent());
         if (simulation == null || simulation.activeCount() == 0) {
             source.sendSuccess(() -> Component.literal("No particles in " + dimension + " (" + total
-                    + " in all dimensions, limit " + ServerSimulations.limit() + " per dimension)"), false);
+                    + " in all dimensions, limit " + ServerSimulations.limit() + " per dimension)\n" + network),
+                    false);
             return 0;
-        }
-        int[] counts = new int[ParticleSoA.MATERIAL_COUNT];
-        simulation.countByMaterial(counts);
-        StringBuilder materials = new StringBuilder();
-        for (byte mat = 0; mat < ParticleSoA.MATERIAL_COUNT; mat++) {
-            materials.append(mat == 0 ? "" : ", ").append(MaterialProperties.name(mat)).append(' ').append(counts[mat]);
         }
         int active = simulation.activeCount();
         String message = "Fluid physics in " + dimension + ": " + active + " particles ("
                 + simulation.countResting() + " resting), limit " + simulation.limit() + ", "
                 + simulation.capacity() + " allocated\n"
-                + "  " + materials + "\n"
-                + "  step " + millis(simulation.lastStepNanos()) + " ms, average "
-                + millis(simulation.averageStepNanos()) + " ms, max " + millis(simulation.maxStepNanos())
-                + " ms over the last " + FluidSimulation.STATS_WINDOW + " ticks; up to "
-                + simulation.lastMaxNeighbors() + " neighbours, " + simulation.workerThreads() + " solver threads\n"
-                + "  voxel cache: " + simulation.voxels().size() + " solid blocks in "
-                + simulation.voxels().cachedSectionCount() + " sections; " + simulation.removedInVoid()
-                + " particles fell out of the world\n"
+                + StatsReport.simulationLines(simulation) + "\n"
+                + network + "\n"
                 + "  all dimensions: " + total + " particles";
         source.sendSuccess(() -> Component.literal(message), false);
         return active;
@@ -192,10 +173,6 @@ public final class FluidPhysicsCommand {
                 ? "; particles above it stay until they condense or are cleared" : "");
         source.sendSuccess(() -> Component.literal(message), true);
         return max;
-    }
-
-    private static String millis(long nanos) {
-        return String.format(Locale.ROOT, "%.2f", nanos / 1.0e6);
     }
 
     private static String dimensionName(ServerLevel level) {

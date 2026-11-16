@@ -4,7 +4,7 @@
 
 Realistic Fluid & Granular Physics (`fluidphysics`) replaces Minecraft's cellular fluids and falling-sand behaviour with a real-time, particle-based simulation. Liquids flow around obstacles, spray from pipes, burst through broken dams and settle into piles, all while staying fast enough for multiplayer.
 
-> **Status:** early development (v0.1.0). The physics core (solver, spatial grid, voxel collision), the network events and the `/fluidphysics` command are in place and covered by unit tests. Particles spawned with `/fluidphysics spawn` are simulated on the server and on every client and rendered in game. Items (physics buckets, crumbling sand) and world hooks (condensation, cauldrons, boats, explosions) come next. The features below describe the design targets. See [Plan.md](Plan.md) for the detailed specification and progress.
+> **Status:** early development (v0.1.0). The physics core, networking, rendering, items and world interactions are in place: physics buckets and crumbling sand, condensation back into vanilla blocks, cauldrons, water and lava reactions, boats, falling blocks, explosions and effects on entities. Everything runs on all four targets and is covered by unit tests and in-game checks. Performance work (Plan.md §6) comes next. Features that are still planned are marked as such below. See [Plan.md](Plan.md) for the detailed specification and progress.
 
 ## Supported platforms
 
@@ -28,17 +28,29 @@ Requires Java 21. The mod uses the official Mojang mappings, has no heavy runtim
 
 ### Strict mass conservation
 
-- One bucket or one full block equals exactly **64 particles** (a 4×4×4 grid). Nothing is duplicated or lost.
-- **Condensation:** when 64 particles of one material rest inside a single block space, they turn back into the matching vanilla block (water, lava, slime, sand). This keeps the particle count and lag low.
+- One bucket or one full block equals exactly **64 particles** (a 4×4×4 grid). Nothing is ever duplicated. Particles only disappear where it makes physical sense: water that boils off cooling lava, a few lava particles that cool without forming a whole block, or a small leftover that merges into a vanilla water or lava source next to it.
+- **Condensation:** when resting particles of one material add up to 64, in one block or spread over neighbouring blocks, they turn back into the matching vanilla block (water, lava, slime, sand) at the lowest free spot. This keeps the particle count and lag low.
 - **Cauldrons** physically fill up with particles and raise the vanilla cauldron level.
 - Physics buckets spawn particles, and an empty bucket can scoop them up again.
 
+### Items
+
+| Item | Use |
+|------|-----|
+| **Physics water / lava / slime bucket** | Pours 64 particles into the block you aim at and leaves an empty bucket. Nothing is poured if the particle limit is reached, so a bucket never loses part of its content. |
+| **Empty bucket** (vanilla) | Picks up 64 particles of water, lava or slime near where you aim (within 2.5 blocks) before it looks for vanilla fluids. |
+| **Physics sand** | Crumbles into 64 sand particles when the block below it is removed, when you mine it or when it is blown up. Resting sand turns back into vanilla sand. |
+
+The buckets are in the *Tools & Utilities* creative tab, physics sand is in *Natural Blocks*.
+
 ### World interaction
 
-- **Floodgates and dams:** breaking glass, opening trapdoors or retracting pistons wakes sleeping particles so they flow immediately.
-- **Boats** use four-point buoyancy, so they pitch and roll with the water.
-- **Anvils and TNT** displace fluid. Explosions push particles outward, and anvils bounce off slime.
-- Chunk unloads force condensation, so no particles are orphaned and mass survives restarts.
+- **Floodgates and dams:** every block change reaches the particles at once, so breaking glass, opening trapdoors or retracting pistons lets them flow immediately.
+- **Water and lava react:** lava particles that touch water cool into obsidian or cobblestone, and water particles turn vanilla lava into stone.
+- **Boats** float on water particles. Buoyancy is sampled at the boat's four corners, and streams carry the boat along. (Visible pitch and roll are planned.)
+- **Anvils and TNT** displace fluid. Explosions push particles outward, and falling anvils splash through particles and bounce off slime.
+- **Entities:** lava particles set entities on fire, water particles put fires out, cushion falls, carry entities along and keep items afloat, and slime bounces falling players and mobs back up. Jumping into particles splashes them away.
+- Chunk unloads force condensation, so no particles are orphaned and mass survives restarts (planned).
 
 ### Smooth visuals
 
@@ -73,13 +85,16 @@ Particle positions are never sent over the network. The server sends only small 
 All subcommands need operator rights (permission level 2) and act on your current dimension.
 
 ```
-/fluidphysics stats                         Show particle counts and solver timings
+/fluidphysics stats                         Show particle counts, tick timings with their breakdown, allocations,
+                                            the voxel cache and the packets sent
 /fluidphysics clear                         Remove all particles
 /fluidphysics spawn <material> [blocks] [pos]
                                             Fill blocks with particles (64 per block) at your position or pos
                                             material: water, lava, slime or sand; blocks: 1 to 512
 /fluidphysics limit [n]                     Show or set the particle limit per dimension (0 to 32768)
 ```
+
+`/fluidphysics_client stats` (no operator rights needed) shows the same for your own client's simulation, plus the render time per frame.
 
 ## Building
 
@@ -91,6 +106,8 @@ All subcommands need operator rights (permission level 2) and act on your curren
 ```
 
 The solver benchmark (`PbfSolverTest`) prints the median time per tick at 16,384 particles and fails on any heap allocation inside the step loop.
+
+JMH benchmarks of the solver (4k, 16k and 32k particles, one thread and the default worker pool) live in `common/src/jmh`; run them with `./gradlew :common:1.21.11:jmh` (about 5 minutes; pass JMH options with `-Pjmh="..."`). Results are recorded in `docs/perf/`.
 
 The project is organised as `common`, `fabric` and `neoforge` modules, with loader-specific hooks behind a ServiceLoader-based platform interface.
 

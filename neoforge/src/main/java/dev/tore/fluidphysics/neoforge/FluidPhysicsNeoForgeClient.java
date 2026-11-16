@@ -3,12 +3,14 @@ package dev.tore.fluidphysics.neoforge;
 
 import dev.tore.fluidphysics.FluidPhysicsCommon;
 import dev.tore.fluidphysics.client.ClientSimulation;
+import dev.tore.fluidphysics.client.ClientStatsCommand;
 import dev.tore.fluidphysics.client.render.ParticleBatchRenderer;
 import dev.tore.fluidphysics.interaction.Simulations;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
@@ -20,6 +22,10 @@ public final class FluidPhysicsNeoForgeClient {
 
         NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class,
                 event -> ClientSimulation.tick(Minecraft.getInstance()));
+
+        NeoForge.EVENT_BUS.addListener(RegisterClientCommandsEvent.class,
+                event -> ClientStatsCommand.register(event.getDispatcher(),
+                        (source, message) -> source.sendSuccess(() -> message, false)));
 
         // Right after translucent terrain.
         //? if >=1.21.11 {

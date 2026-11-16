@@ -45,6 +45,39 @@ tasks.test {
     }
 }
 
+// JMH benchmarks of the physics core (Plan.md §6.5) in src/jmh. `check` compiles them so they keep building; they only
+// run on request: ./gradlew :common:1.21.11:jmh, with JMH options in -Pjmh="..." (e.g. -Pjmh="-p particles=16384").
+val jmh: SourceSet = sourceSets.create("jmh") {
+    // The benchmarks reuse the hand-built test worlds of src/test (dev.tore.fluidphysics.physics.TestWorlds).
+    val main = sourceSets.main.get()
+    val test = sourceSets.test.get()
+    compileClasspath += main.output + test.output + main.compileClasspath
+    runtimeClasspath += main.output + test.output + main.runtimeClasspath
+}
+
+dependencies {
+    "jmhImplementation"("org.openjdk.jmh:jmh-core:${prop("jmh_version")}")
+    "jmhAnnotationProcessor"("org.openjdk.jmh:jmh-generator-annprocess:${prop("jmh_version")}")
+}
+
+tasks.register<JavaExec>("jmh") {
+    group = "verification"
+    description = "Runs the JMH benchmarks in src/jmh. Pass JMH options with -Pjmh=\"...\"."
+    classpath = jmh.runtimeClasspath
+    mainClass = "org.openjdk.jmh.Main"
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(prop("java_version").toInt()) }
+    val options = providers.gradleProperty("jmh").orElse("")
+    argumentProviders.add(CommandLineArgumentProvider { options.get().split(' ').filter { it.isNotBlank() } })
+    // Minecraft classes may write logs/ into the working directory; keep it inside build/.
+    val runDir = layout.buildDirectory.dir("jmh-run")
+    workingDir(runDir)
+    doFirst { runDir.get().asFile.mkdirs() }
+}
+
+tasks.check {
+    dependsOn(jmh.classesTaskName)
+}
+
 // The loader modules compile the common sources together with their own, so hand them the source
 // directories instead of a jar. For the inactive Minecraft version these are Stonecutter's generated copies.
 val commonJava = configurations.create("commonJava") {

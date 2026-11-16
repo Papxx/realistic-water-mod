@@ -1,0 +1,394 @@
+[
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "dev.tore.fluidphysics.physics.SolverStepBenchmark.step",
+        "mode" : "avgt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/usr/lib/jvm/java-21-openjdk/bin/java",
+        "jvmArgs" : [
+            "-Dfile.encoding=UTF-8",
+            "-Duser.country=DE",
+            "-Duser.language=de",
+            "-Duser.variant",
+            "-Xms1g",
+            "-Xmx1g"
+        ],
+        "jdkVersion" : "21.0.13.0.3",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "21.0.13.0.3+1",
+        "warmupIterations" : 5,
+        "warmupTime" : "2 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 8,
+        "measurementTime" : "2 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "particles" : "4096",
+            "scenario" : "damBreak",
+            "threads" : "0"
+        },
+        "primaryMetric" : {
+            "score" : 0.8088318594278918,
+            "scoreError" : 0.054043194791262315,
+            "scoreConfidence" : [
+                0.7547886646366295,
+                0.8628750542191541
+            ],
+            "scorePercentiles" : {
+                "0.0" : 0.776603135,
+                "50.0" : 0.8069281624199949,
+                "90.0" : 0.8662351495689655,
+                "95.0" : 0.8662351495689655,
+                "99.0" : 0.8662351495689655,
+                "99.9" : 0.8662351495689655,
+                "99.99" : 0.8662351495689655,
+                "99.999" : 0.8662351495689655,
+                "99.9999" : 0.8662351495689655,
+                "100.0" : 0.8662351495689655
+            },
+            "scoreUnit" : "ms/op",
+            "rawData" : [
+                [
+                    0.7859119046875,
+                    0.8662351495689655,
+                    0.78776349375,
+                    0.8097673149193548,
+                    0.8040890099206349,
+                    0.8178657528225807,
+                    0.8224191147540983,
+                    0.776603135
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "dev.tore.fluidphysics.physics.SolverStepBenchmark.step",
+        "mode" : "avgt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/usr/lib/jvm/java-21-openjdk/bin/java",
+        "jvmArgs" : [
+            "-Dfile.encoding=UTF-8",
+            "-Duser.country=DE",
+            "-Duser.language=de",
+            "-Duser.variant",
+            "-Xms1g",
+            "-Xmx1g"
+        ],
+        "jdkVersion" : "21.0.13.0.3",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "21.0.13.0.3+1",
+        "warmupIterations" : 5,
+        "warmupTime" : "2 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 8,
+        "measurementTime" : "2 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "particles" : "4096",
+            "scenario" : "restingPool",
+            "threads" : "0"
+        },
+        "primaryMetric" : {
+            "score" : 1.1114207740831648,
+            "scoreError" : 0.07340207794163635,
+            "scoreConfidence" : [
+                1.0380186961415283,
+                1.1848228520248012
+            ],
+            "scorePercentiles" : {
+                "0.0" : 1.064233859574468,
+                "50.0" : 1.1045606003381643,
+                "90.0" : 1.1689010994186046,
+                "95.0" : 1.1689010994186046,
+                "99.0" : 1.1689010994186046,
+                "99.9" : 1.1689010994186046,
+                "99.99" : 1.1689010994186046,
+                "99.999" : 1.1689010994186046,
+                "99.9999" : 1.1689010994186046,
+                "100.0" : 1.1689010994186046
+            },
+            "scoreUnit" : "ms/op",
+            "rawData" : [
+                [
+                    1.0757821962765957,
+                    1.064233859574468,
+                    1.0930044445652174,
+                    1.0840395590425531,
+                    1.1161167561111112,
+                    1.1689010994186046,
+                    1.1347019322222223,
+                    1.1545863454545455
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "dev.tore.fluidphysics.physics.SolverStepBenchmark.step",
+        "mode" : "avgt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/usr/lib/jvm/java-21-openjdk/bin/java",
+        "jvmArgs" : [
+            "-Dfile.encoding=UTF-8",
+            "-Duser.country=DE",
+            "-Duser.language=de",
+            "-Duser.variant",
+            "-Xms1g",
+            "-Xmx1g"
+        ],
+        "jdkVersion" : "21.0.13.0.3",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "21.0.13.0.3+1",
+        "warmupIterations" : 5,
+        "warmupTime" : "2 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 8,
+        "measurementTime" : "2 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "particles" : "16384",
+            "scenario" : "damBreak",
+            "threads" : "0"
+        },
+        "primaryMetric" : {
+            "score" : 7.492276198248106,
+            "scoreError" : 11.20152285457091,
+            "scoreConfidence" : [
+                -3.7092466563228044,
+                18.693799052819017
+            ],
+            "scorePercentiles" : {
+                "0.0" : 4.482635339583333,
+                "50.0" : 4.749246978409091,
+                "90.0" : 21.593051425,
+                "95.0" : 21.593051425,
+                "99.0" : 21.593051425,
+                "99.9" : 21.593051425,
+                "99.99" : 21.593051425,
+                "99.999" : 21.593051425,
+                "99.9999" : 21.593051425,
+                "100.0" : 21.593051425
+            },
+            "scoreUnit" : "ms/op",
+            "rawData" : [
+                [
+                    4.484281864583333,
+                    4.630510965909091,
+                    4.482635339583333,
+                    4.867982990909091,
+                    4.627168675,
+                    21.593051425,
+                    7.672237517857143,
+                    7.580340807142857
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "dev.tore.fluidphysics.physics.SolverStepBenchmark.step",
+        "mode" : "avgt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/usr/lib/jvm/java-21-openjdk/bin/java",
+        "jvmArgs" : [
+            "-Dfile.encoding=UTF-8",
+            "-Duser.country=DE",
+            "-Duser.language=de",
+            "-Duser.variant",
+            "-Xms1g",
+            "-Xmx1g"
+        ],
+        "jdkVersion" : "21.0.13.0.3",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "21.0.13.0.3+1",
+        "warmupIterations" : 5,
+        "warmupTime" : "2 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 8,
+        "measurementTime" : "2 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "particles" : "16384",
+            "scenario" : "restingPool",
+            "threads" : "0"
+        },
+        "primaryMetric" : {
+            "score" : 4.946325817013888,
+            "scoreError" : 1.7228350266087478,
+            "scoreConfidence" : [
+                3.2234907904051404,
+                6.669160843622636
+            ],
+            "scorePercentiles" : {
+                "0.0" : 4.259846158333334,
+                "50.0" : 4.50484655,
+                "90.0" : 6.6828605375,
+                "95.0" : 6.6828605375,
+                "99.0" : 6.6828605375,
+                "99.9" : 6.6828605375,
+                "99.99" : 6.6828605375,
+                "99.999" : 6.6828605375,
+                "99.9999" : 6.6828605375,
+                "100.0" : 6.6828605375
+            },
+            "scoreUnit" : "ms/op",
+            "rawData" : [
+                [
+                    6.6828605375,
+                    6.037482319444444,
+                    4.761127,
+                    4.516652439583333,
+                    4.493040660416667,
+                    4.464700958333333,
+                    4.3548964625,
+                    4.259846158333334
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "dev.tore.fluidphysics.physics.SolverStepBenchmark.step",
+        "mode" : "avgt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/usr/lib/jvm/java-21-openjdk/bin/java",
+        "jvmArgs" : [
+            "-Dfile.encoding=UTF-8",
+            "-Duser.country=DE",
+            "-Duser.language=de",
+            "-Duser.variant",
+            "-Xms1g",
+            "-Xmx1g"
+        ],
+        "jdkVersion" : "21.0.13.0.3",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "21.0.13.0.3+1",
+        "warmupIterations" : 5,
+        "warmupTime" : "2 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 8,
+        "measurementTime" : "2 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "particles" : "32768",
+            "scenario" : "damBreak",
+            "threads" : "0"
+        },
+        "primaryMetric" : {
+            "score" : 10.126330853645834,
+            "scoreError" : 0.5068606019825719,
+            "scoreConfidence" : [
+                9.619470251663262,
+                10.633191455628406
+            ],
+            "scorePercentiles" : {
+                "0.0" : 9.812680775,
+                "50.0" : 10.050741225833333,
+                "90.0" : 10.637464235,
+                "95.0" : 10.637464235,
+                "99.0" : 10.637464235,
+                "99.9" : 10.637464235,
+                "99.99" : 10.637464235,
+                "99.999" : 10.637464235,
+                "99.9999" : 10.637464235,
+                "100.0" : 10.637464235
+            },
+            "scoreUnit" : "ms/op",
+            "rawData" : [
+                [
+                    9.9249399875,
+                    10.241102045,
+                    10.32371716,
+                    10.637464235,
+                    10.092656085,
+                    9.969260175,
+                    9.812680775,
+                    10.008826366666666
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "dev.tore.fluidphysics.physics.SolverStepBenchmark.step",
+        "mode" : "avgt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/usr/lib/jvm/java-21-openjdk/bin/java",
+        "jvmArgs" : [
+            "-Dfile.encoding=UTF-8",
+            "-Duser.country=DE",
+            "-Duser.language=de",
+            "-Duser.variant",
+            "-Xms1g",
+            "-Xmx1g"
+        ],
+        "jdkVersion" : "21.0.13.0.3",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "21.0.13.0.3+1",
+        "warmupIterations" : 5,
+        "warmupTime" : "2 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 8,
+        "measurementTime" : "2 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "particles" : "32768",
+            "scenario" : "restingPool",
+            "threads" : "0"
+        },
+        "primaryMetric" : {
+            "score" : 10.195964151875,
+            "scoreError" : 0.8027573892769796,
+            "scoreConfidence" : [
+                9.39320676259802,
+                10.99872154115198
+            ],
+            "scorePercentiles" : {
+                "0.0" : 9.730245983333333,
+                "50.0" : 10.010773522083333,
+                "90.0" : 10.807245495,
+                "95.0" : 10.807245495,
+                "99.0" : 10.807245495,
+                "99.9" : 10.807245495,
+                "99.99" : 10.807245495,
+                "99.999" : 10.807245495,
+                "99.9999" : 10.807245495,
+                "100.0" : 10.807245495
+            },
+            "scoreUnit" : "ms/op",
+            "rawData" : [
+                [
+                    10.097393615,
+                    10.467959535,
+                    10.74881412,
+                    9.886823720833334,
+                    9.924153429166667,
+                    9.905077316666667,
+                    9.730245983333333,
+                    10.807245495
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    }
+]
+
+

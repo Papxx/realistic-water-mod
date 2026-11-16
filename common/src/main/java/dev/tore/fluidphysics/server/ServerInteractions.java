@@ -176,9 +176,13 @@ final class ServerInteractions {
         }
     }
 
-    /** Forgets stone that was still forming (after {@code /fluidphysics clear}). */
+    /**
+     * Forgets stone that was still forming and the particles cauldrons collected towards their next level (after
+     * {@code /fluidphysics clear}, which removes every particle).
+     */
     void clear() {
         stone.clear();
+        cauldrons.clear();
     }
 
     int stoneForming() {

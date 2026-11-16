@@ -167,14 +167,29 @@ class FluidSimulationTest {
         for (int t = 0; t < 5; t++) {
             sim.advance(-1000);
         }
-        assertTrue(sim.lastStepNanos() > 0);
-        assertTrue(sim.averageStepNanos() > 0);
-        assertTrue(sim.maxStepNanos() >= sim.averageStepNanos());
+        SimulationStats stats = sim.stats();
+        assertEquals(5, stats.samples());
+        assertTrue(stats.step().last() > 0);
+        assertTrue(stats.step().mean() > 0);
+        assertTrue(stats.step().max() >= stats.step().mean());
+        assertTrue(stats.tick().last() >= stats.step().last(), "the tick includes the solver step");
+        long phases = 0L;
+        for (int phase = 0; phase < PbfSolver.PHASE_COUNT; phase++) {
+            phases += stats.phase(phase).last();
+        }
+        assertEquals(stats.step().last(), phases, "the solver phases add up to the step");
+        assertTrue(stats.lastMeanNeighbors() > 1f && stats.lastMaxNeighbors() >= stats.lastMeanNeighbors());
+
         int[] counts = new int[ParticleSoA.MATERIAL_COUNT];
         sim.countByMaterial(counts);
         assertEquals(64, counts[MATERIAL_WATER]);
         assertEquals(32, counts[MATERIAL_LAVA]);
         assertEquals(0, sim.countResting());
+
+        // Ticks without particles are not recorded, and clear() forgets the samples.
+        sim.clear();
+        sim.advance(-1000);
+        assertEquals(0, sim.stats().samples());
     }
 
     @Test

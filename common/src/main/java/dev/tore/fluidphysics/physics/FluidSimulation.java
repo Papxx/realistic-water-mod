@@ -32,8 +32,6 @@ public final class FluidSimulation {
     public static final float MAX_IMPULSE_RADIUS = 32f;
     /** Largest velocity change of {@link #applyImpulse}, in blocks per second (the solver's speed limit applies after). */
     public static final float MAX_IMPULSE_FORCE = 50f;
-    /** Ticks covered by the step time statistics. */
-    public static final int STATS_WINDOW = 20;
     /** Size of the first allocation; later allocations double it. */
     static final int INITIAL_CAPACITY = 4096;
 
@@ -53,9 +51,7 @@ public final class FluidSimulation {
     private BlockOccupancy occupancy;
     private int occupancyGeneration = -1;
 
-    private final long[] stepNanos = new long[STATS_WINDOW];
-    private int stepCursor;
-    private int stepSamples;
+    private final SimulationStats stats = new SimulationStats();
     private long removedInVoid;
 
     /**
@@ -496,6 +492,7 @@ public final class FluidSimulation {
         occupancy = null;
         generation++;
         voxels.clear();
+        stats.reset();
         return removed;
     }
 
@@ -505,24 +502,31 @@ public final class FluidSimulation {
      * sections the particles reach.
      */
     public void tick(Level level) {
-        if (activeCount() == 0) {
-            recordStep(0L);
-            return;
-        }
-        voxels.ensureCached(level, particles);
-        advance(minY(level) - VOID_DEPTH);
+        advance(level, minY(level) - VOID_DEPTH);
     }
 
     /** {@link #tick} without a level, for tests: the voxel cache must already hold the world. */
     void advance(int removeBelowY) {
+        advance(null, removeBelowY);
+    }
+
+    private void advance(Level level, int removeBelowY) {
         if (activeCount() == 0) {
-            recordStep(0L);
             return;
         }
+        long start = System.nanoTime();
+        long allocatedBefore = AllocationMeter.currentThreadBytes();
+        long workersBefore = pool.workerAllocatedBytes();
+        if (level != null) {
+            voxels.ensureCached(level, particles);
+        }
+        long voxelsDone = System.nanoTime();
         solver.step();
         generation++;
-        recordStep(solver.lastStepNanos());
         removeBelow(removeBelowY);
+        long workerAllocated = pool.workerAllocatedBytes() - workersBefore;
+        long allocated = AllocationMeter.currentThreadBytes() - allocatedBefore;
+        stats.record(System.nanoTime() - start, voxelsDone - start, solver, allocated, workerAllocated);
     }
 
     private static int minY(Level level) {
@@ -548,38 +552,9 @@ public final class FluidSimulation {
         }
     }
 
-    private void recordStep(long nanos) {
-        stepNanos[stepCursor] = nanos;
-        stepCursor = (stepCursor + 1) % STATS_WINDOW;
-        stepSamples = Math.min(stepSamples + 1, STATS_WINDOW);
-    }
-
-    /** Wall time of the last tick in nanoseconds (0 if there was nothing to simulate). */
-    public long lastStepNanos() {
-        return stepSamples == 0 ? 0L : stepNanos[(stepCursor + STATS_WINDOW - 1) % STATS_WINDOW];
-    }
-
-    /** Mean wall time of the last {@link #STATS_WINDOW} ticks in nanoseconds. */
-    public long averageStepNanos() {
-        long sum = 0L;
-        for (int i = 0; i < stepSamples; i++) {
-            sum += stepNanos[i];
-        }
-        return stepSamples == 0 ? 0L : sum / stepSamples;
-    }
-
-    /** Longest wall time of the last {@link #STATS_WINDOW} ticks in nanoseconds. */
-    public long maxStepNanos() {
-        long max = 0L;
-        for (int i = 0; i < stepSamples; i++) {
-            max = Math.max(max, stepNanos[i]);
-        }
-        return max;
-    }
-
-    /** Most neighbours any particle had in the last substep. */
-    public int lastMaxNeighbors() {
-        return solver == null ? 0 : solver.lastMaxNeighbors();
+    /** Timings and allocations of the last simulated ticks; reset by {@link #clear()}. */
+    public SimulationStats stats() {
+        return stats;
     }
 
     /** Particles removed because they fell out of the world, since this simulation was created. */

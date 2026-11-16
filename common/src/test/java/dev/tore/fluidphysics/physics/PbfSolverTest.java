@@ -43,10 +43,14 @@ class PbfSolverTest {
                 .toArray();
         long workersBefore = Arrays.stream(threads.getThreadAllocatedBytes(workerIds)).sum();
         long[] nanos = new long[100];
+        long[] phaseNanos = new long[PbfSolver.PHASE_COUNT];
         long callerBefore = threads.getCurrentThreadAllocatedBytes();
         for (int i = 0; i < nanos.length; i++) {
             solver.step();
             nanos[i] = solver.lastStepNanos();
+            for (int phase = 0; phase < PbfSolver.PHASE_COUNT; phase++) {
+                phaseNanos[phase] += solver.lastPhaseNanos(phase);
+            }
         }
         long callerAllocated = threads.getCurrentThreadAllocatedBytes() - callerBefore;
         long workersAllocated = Arrays.stream(threads.getThreadAllocatedBytes(workerIds)).sum() - workersBefore;
@@ -60,6 +64,12 @@ class PbfSolverTest {
                 particles.activeCount, pool.size(), medianMs, nanos[89] / 1.0e6, nanos[99] / 1.0e6,
                 TARGET_MEDIAN_MS_PER_STEP, medianMs < TARGET_MEDIAN_MS_PER_STEP ? "met" : "NOT met",
                 solver.lastMaxNeighbors(), nanos.length, callerAllocated, workersAllocated, workerIds.length);
+        StringBuilder phases = new StringBuilder("  mean per step:");
+        for (int phase = 0; phase < PbfSolver.PHASE_COUNT; phase++) {
+            phases.append(String.format(" %s %.3f ms", PbfSolver.phaseName(phase),
+                    phaseNanos[phase] / 1.0e6 / nanos.length));
+        }
+        System.out.println(phases.append(String.format("; %.1f neighbours per particle", solver.lastMeanNeighbors())));
 
         assertEquals(0L, callerAllocated, "the step loop must not allocate");
         assertEquals(0L, workersAllocated, "the worker threads must not allocate");

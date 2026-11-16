@@ -6,6 +6,7 @@ import dev.tore.fluidphysics.network.FluidCondensePayload;
 import dev.tore.fluidphysics.network.FluidImpulsePayload;
 import dev.tore.fluidphysics.network.FluidNetworking;
 import dev.tore.fluidphysics.network.FluidSpawnPayload;
+import dev.tore.fluidphysics.physics.AllocationMeter;
 import dev.tore.fluidphysics.physics.FluidSimulation;
 import dev.tore.fluidphysics.physics.ParticleSoA;
 import dev.tore.fluidphysics.physics.WorkerPool;
@@ -87,8 +88,16 @@ public final class ServerSimulations {
         FluidSimulation simulation = SIMULATIONS.get(level);
         // /tick freeze stops the level, so it stops the particles too.
         if (simulation != null && level.tickRateManager().runsNormally()) {
+            // The simulation records statistics only for ticks with particles; the interactions join that record.
+            boolean recorded = simulation.activeCount() > 0;
             simulation.tick(level);
+            long start = System.nanoTime();
+            long allocatedBefore = AllocationMeter.currentThreadBytes();
             INTERACTIONS.get(level).tick(simulation);
+            if (recorded) {
+                simulation.stats().addInteractions(System.nanoTime() - start,
+                        AllocationMeter.currentThreadBytes() - allocatedBefore);
+            }
         }
     }
 
@@ -102,6 +111,7 @@ public final class ServerSimulations {
     public static void onServerStopped() {
         SIMULATIONS.clear();
         INTERACTIONS.clear();
+        FluidNetworking.sent().reset();
         limit = DEFAULT_LIMIT;
         if (pool != null) {
             pool.close();

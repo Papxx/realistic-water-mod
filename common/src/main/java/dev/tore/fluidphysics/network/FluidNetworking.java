@@ -13,7 +13,15 @@ import net.minecraft.world.level.ChunkPos;
  * where they happen.
  */
 public final class FluidNetworking {
+    /** What the server sent, for {@code /fluidphysics stats}. */
+    private static final NetworkStats SENT = new NetworkStats();
+
     private FluidNetworking() {
+    }
+
+    /** Packets the server sent since it started (server thread only); reset when it stops. */
+    public static NetworkStats sent() {
+        return SENT;
     }
 
     /** Sends {@code payload} to every player who has the chunk of block column ({@code blockX}, {@code blockZ}) loaded. */
@@ -22,6 +30,7 @@ public final class FluidNetworking {
         // The same lookup Fabric's PlayerLookup.tracking and NeoForge's PacketDistributor.sendToPlayersTrackingChunk use.
         for (ServerPlayer player : level.getChunkSource().chunkMap.getPlayers(chunk, false)) {
             Services.PLATFORM.sendToPlayer(player, payload);
+            SENT.count(payload);
         }
     }
 
@@ -29,6 +38,7 @@ public final class FluidNetworking {
     public static void sendToLevel(ServerLevel level, CustomPacketPayload payload) {
         for (ServerPlayer player : level.players()) {
             Services.PLATFORM.sendToPlayer(player, payload);
+            SENT.count(payload);
         }
     }
 }

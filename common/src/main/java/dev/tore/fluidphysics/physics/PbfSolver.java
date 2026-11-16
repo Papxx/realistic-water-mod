@@ -130,6 +130,25 @@ public final class PbfSolver {
     // Faces of a sub-voxel, also used as the outward normal of a wall contact:
     // 1 = -X, 2 = +X, 3 = -Y, 4 = +Y, 5 = -Z, 6 = +Z.
 
+    // Phases of a step, timed separately (see lastPhaseNanos). Each sums its passes over all substeps.
+    /** Copy of the positions to {@code prev*}, gravity, speed limit and predicted positions. */
+    public static final int PHASE_PREDICT = 0;
+    /** Grid cells, counting sort and the copy into grid order. */
+    public static final int PHASE_GRID = 1;
+    /** Neighbour lists. */
+    public static final int PHASE_NEIGHBORS = 2;
+    /** World collision and wall density, plus applying each iteration's corrections (followed by collision). */
+    public static final int PHASE_COLLISION = 3;
+    /** Density constraint (lambdas) and position corrections of fluids and grains. */
+    public static final int PHASE_DENSITY = 4;
+    /** Velocities, wall bounce and XSPH viscosity. */
+    public static final int PHASE_VELOCITY = 5;
+    /** Copy back into particle order and sleep counters. */
+    public static final int PHASE_WRITE_BACK = 6;
+    public static final int PHASE_COUNT = 7;
+    private static final String[] PHASE_NAMES =
+            {"predict", "grid", "neighbours", "collision", "density", "velocity", "write-back"};
+
     private final ParticleSoA particles;
     private final ChunkVoxelCache voxels;
     private final WorkerPool pool;
@@ -181,8 +200,8 @@ public final class PbfSolver {
     private final float[] pairGrad;
     /** Vertical component of the unit vector from each neighbour to the particle, for mass scaling. */
     private final float[] pairUp;
-    /** Per worker: the largest neighbour count it saw. */
-    private final int[] workerMaxNeighbors;
+    /** Per worker: the largest neighbour count it saw (slot 0) and the sum of all its neighbour counts (slot 1). */
+    private final int[] workerNeighborStats;
 
     private final WorkerPool.RangeTask predictTask = this::predict;
     private final WorkerPool.RangeTask cellsTask = this::computeCells;
@@ -199,6 +218,9 @@ public final class PbfSolver {
 
     private long lastStepNanos;
     private int lastMaxNeighbors;
+    private float lastMeanNeighbors;
+    /** Wall time of each phase in the last step; they add up to {@link #lastStepNanos}. */
+    private final long[] phaseNanos = new long[PHASE_COUNT];
 
     /** A solver that runs on the calling thread only. */
     public PbfSolver(ParticleSoA particles, ChunkVoxelCache voxels) {
@@ -243,7 +265,7 @@ public final class PbfSolver {
         neighborCount = new int[capacity];
         pairGrad = new float[capacity * MAX_NEIGHBORS];
         pairUp = new float[capacity * MAX_NEIGHBORS];
-        workerMaxNeighbors = new int[pool.size() * WORKER_STRIDE];
+        workerNeighborStats = new int[pool.size() * WORKER_STRIDE];
     }
 
     public SpatialHashGrid grid() {
@@ -268,6 +290,24 @@ public final class PbfSolver {
         return lastMaxNeighbors;
     }
 
+    /** Mean number of neighbours per particle in the last substep. */
+    public float lastMeanNeighbors() {
+        return lastMeanNeighbors;
+    }
+
+    /**
+     * Wall time of one phase ({@code PHASE_*}) in the last {@link #step()}, summed over its substeps, in nanoseconds.
+     * The phases of a step add up to {@link #lastStepNanos()}.
+     */
+    public long lastPhaseNanos(int phase) {
+        return phaseNanos[phase];
+    }
+
+    /** Short English name of a phase ({@code PHASE_*}) for statistics output. */
+    public static String phaseName(int phase) {
+        return PHASE_NAMES[phase];
+    }
+
     /**
      * Builds the grid and neighbour lists from the current positions without moving anything. For tests: afterwards
      * {@code grid().sortedIndices[k]} is the particle in grid slot {@code k}, with neighbours
@@ -279,7 +319,7 @@ public final class PbfSolver {
         System.arraycopy(p.posX, 0, p.predX, 0, n);
         System.arraycopy(p.posY, 0, p.predY, 0, n);
         System.arraycopy(p.posZ, 0, p.predZ, 0, n);
-        prepareGrid(n);
+        prepareGrid(n, System.nanoTime());
     }
 
     int neighborCountOfSlot(int slot) {
@@ -293,6 +333,7 @@ public final class PbfSolver {
     /** Advances the simulation by one game tick. */
     public void step() {
         long start = System.nanoTime();
+        Arrays.fill(phaseNanos, 0L);
         ParticleSoA p = particles;
         int n = p.activeCount;
         System.arraycopy(p.posX, 0, p.prevX, 0, n);
@@ -303,44 +344,69 @@ public final class PbfSolver {
             Arrays.fill(slotBlockKey, Long.MIN_VALUE);
             Arrays.fill(maskCacheKey, Long.MIN_VALUE);
         }
+        long time = start;
         if (n > 0) {
             for (int s = 0; s < SUBSTEPS; s++) {
-                substep(n);
+                time = substep(n, time);
             }
             pool.run(sleepTask, n);
+            time = lap(PHASE_WRITE_BACK, time);
+        } else {
+            time = lap(PHASE_PREDICT, time);
         }
-        lastStepNanos = System.nanoTime() - start;
+        lastStepNanos = time - start;
     }
 
-    private void substep(int n) {
+    /** One substep; {@code time} is when the previous phase ended. Returns when the last phase of this one ended. */
+    private long substep(int n, long time) {
         pool.run(predictTask, n);
-        prepareGrid(n);
+        time = lap(PHASE_PREDICT, time);
+        time = prepareGrid(n, time);
         for (int iter = 0; iter < SOLVER_ITERATIONS; iter++) {
             pool.run(lambdaTask, n);
             pool.run(correctionTask, n);
+            time = lap(PHASE_DENSITY, time);
             pool.run(applyTask, n);
+            time = lap(PHASE_COLLISION, time);
         }
         pool.run(velocityTask, n);
         pool.run(viscosityTask, n);
+        time = lap(PHASE_VELOCITY, time);
         pool.run(scatterTask, n);
+        return lap(PHASE_WRITE_BACK, time);
+    }
+
+    /** Adds the time since {@code since} to {@code phase} and returns the current time. */
+    private long lap(int phase, long since) {
+        long now = System.nanoTime();
+        phaseNanos[phase] += now - since;
+        return now;
     }
 
     /**
      * Sorts the predicted positions into the grid, copies the particles into grid order, finds neighbours and resolves
-     * collisions of the predicted positions.
+     * collisions of the predicted positions. {@code time} and the result are phase boundaries, as for {@link #lap}.
      */
-    private void prepareGrid(int n) {
+    private long prepareGrid(int n, long time) {
         pool.run(cellsTask, n);
         grid.sort(n, pool.sharesFor(n));
         pool.run(gatherTask, n);
+        time = lap(PHASE_GRID, time);
         pool.run(neighborTask, n);
-        pool.run(collideTask, n);
         int max = 0;
+        long sum = 0L;
         for (int w = 0; w < pool.size(); w++) {
-            max = Math.max(max, workerMaxNeighbors[w * WORKER_STRIDE]);
-            workerMaxNeighbors[w * WORKER_STRIDE] = 0;
+            int slot = w * WORKER_STRIDE;
+            max = Math.max(max, workerNeighborStats[slot]);
+            sum += workerNeighborStats[slot + 1];
+            workerNeighborStats[slot] = 0;
+            workerNeighborStats[slot + 1] = 0;
         }
         lastMaxNeighbors = max;
+        lastMeanNeighbors = n == 0 ? 0f : (float) sum / n;
+        time = lap(PHASE_NEIGHBORS, time);
+        pool.run(collideTask, n);
+        return lap(PHASE_COLLISION, time);
     }
 
     /** Applies gravity, clamps the speed and predicts positions (particle order). */
@@ -433,7 +499,8 @@ public final class PbfSolver {
     private void buildNeighbors(int from, int to, int worker) {
         int[] cellStart = grid.cellStart;
         int[] cellCount = grid.cellCount;
-        int maxCount = workerMaxNeighbors[worker * WORKER_STRIDE];
+        int maxCount = workerNeighborStats[worker * WORKER_STRIDE];
+        int sum = 0;
         for (int k = from; k < to; k++) {
             float xk = x[k];
             float yk = y[k];
@@ -463,11 +530,13 @@ public final class PbfSolver {
                 }
             }
             neighborCount[k] = count;
+            sum += count;
             if (count > maxCount) {
                 maxCount = count;
             }
         }
-        workerMaxNeighbors[worker * WORKER_STRIDE] = maxCount;
+        workerNeighborStats[worker * WORKER_STRIDE] = maxCount;
+        workerNeighborStats[worker * WORKER_STRIDE + 1] += sum;
     }
 
     /** Appends the particles of sorted slots {@code start..end-1} within {@link #H} of particle {@code k}. */
