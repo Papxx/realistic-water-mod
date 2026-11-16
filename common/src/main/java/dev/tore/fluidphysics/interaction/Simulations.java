@@ -7,6 +7,7 @@ import java.util.function.Function;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * Finds the particle simulation of a level on either side, for code that runs on both (mixins, items, blocks).
@@ -40,13 +41,25 @@ public final class Simulations {
     }
 
     /**
+     * Called before every {@code Level.setBlock} on both sides, with the state the block is about to get. Only the
+     * server's floodgates (Plan.md §7.3.3) need it, and only while they are enabled.
+     */
+    public static void beforeBlockChange(Level level, BlockPos pos, BlockState next) {
+        if (ServerSimulations.floodgatesEnabled() && level instanceof ServerLevel server
+                && server.getServer().isSameThread()) {
+            ServerSimulations.beforeBlockChange(server, pos, next);
+        }
+    }
+
+    /**
      * Called after every successful {@code Level.setBlock} on both sides: re-reads the block into the simulation's
-     * voxel cache, so particles see placed and removed blocks at once (Plan.md §7.3).
+     * voxel cache, so particles see placed and removed blocks at once, and wakes the particles around it if its shape
+     * changed (Plan.md §7.3).
      */
     public static void onBlockChanged(Level level, BlockPos pos) {
         FluidSimulation simulation = forLevel(level);
-        if (simulation != null) {
-            simulation.voxels().onBlockChanged(level, pos);
+        if (simulation != null && simulation.voxels().onBlockChanged(level, pos)) {
+            simulation.wakeAround(pos.getX(), pos.getY(), pos.getZ());
         }
     }
 }

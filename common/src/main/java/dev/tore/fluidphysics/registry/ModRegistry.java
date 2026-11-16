@@ -5,6 +5,7 @@ import dev.tore.fluidphysics.FluidPhysicsCommon;
 import dev.tore.fluidphysics.block.PhysicsSandBlock;
 import dev.tore.fluidphysics.item.PhysicsBucketItem;
 import dev.tore.fluidphysics.physics.ParticleSoA;
+import dev.tore.fluidphysics.server.ParticleTickets;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import net.minecraft.core.registries.Registries;
@@ -21,7 +22,8 @@ import net.minecraft.world.level.block.state.BlockBehaviour;
 /**
  * The mod's blocks and items. Common code creates them; each loader registers them in its own way by passing a
  * registrar to {@link #registerBlocks} and {@link #registerItems} (blocks first), and adds them to the creative tabs
- * through {@link #addToCreativeTab}.
+ * through {@link #addToCreativeTab}. On 1.21.11 the loaders also register the chunk ticket type
+ * ({@code registerTicketTypes}).
  */
 public final class ModRegistry {
     public static final Identifier PHYSICS_SAND_ID = FluidPhysicsCommon.id("physics_sand");
@@ -97,6 +99,16 @@ public final class ModRegistry {
         registrar.accept(LAVA_BUCKET_ID, lavaBucket);
         registrar.accept(SLIME_BUCKET_ID, slimeBucket);
     }
+
+    //? if >=1.21.11 {
+    /**
+     * Hands the mod's chunk ticket types to {@code registrar}. Only 1.21.11 has a ticket type registry; 1.21.1 creates
+     * ticket types without registering them.
+     */
+    public static void registerTicketTypes(BiConsumer<Identifier, net.minecraft.server.level.TicketType> registrar) {
+        registrar.accept(ParticleTickets.ID, ParticleTickets.TYPE);
+    }
+    //?}
 
     private static PhysicsBucketItem bucket(Identifier id, byte material) {
         return new PhysicsBucketItem(material, itemProps(id).stacksTo(1));

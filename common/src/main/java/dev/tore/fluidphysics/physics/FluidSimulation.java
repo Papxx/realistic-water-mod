@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.tore.fluidphysics.physics;
 
+import it.unimi.dsi.fastutil.longs.LongArrayList;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import java.util.Arrays;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 
 /**
@@ -34,6 +38,11 @@ public final class FluidSimulation {
     public static final float MAX_IMPULSE_FORCE = 50f;
     /** Size of the first allocation; later allocations double it. */
     static final int INITIAL_CAPACITY = 4096;
+    /**
+     * Most block changes remembered for {@link #wakeAround} between two ticks; beyond that (an explosion) every
+     * particle wakes up.
+     */
+    static final int MAX_PENDING_WAKES = 1024;
 
     private final WorkerPool pool;
     private final ChunkVoxelCache voxels = new ChunkVoxelCache();
@@ -51,8 +60,16 @@ public final class FluidSimulation {
     private BlockOccupancy occupancy;
     private int occupancyGeneration = -1;
 
+    /** Blocks whose surroundings wake up at the start of the next tick (see {@link #wakeAround}). */
+    private final LongArrayList pendingWakes = new LongArrayList();
+    /** Scratch for {@link #applyWakes}: the blocks around {@link #pendingWakes}. */
+    private final LongOpenHashSet wakeBlocks = new LongOpenHashSet();
+    private boolean wakeEverything;
+
     private final SimulationStats stats = new SimulationStats();
     private long removedInVoid;
+    private long condensedOutside;
+    private long removedOutside;
 
     /**
      * @param pool  threads for the solver; may be shared with other simulations that step on the same thread
@@ -478,6 +495,124 @@ public final class FluidSimulation {
     }
 
     /**
+     * Wakes up the particles in the 3 x 3 x 3 blocks around a block whose shape changed (Plan.md §7.3.2), so a pool
+     * whose floor or wall was just removed does not count as resting. The particles wake at the start of the next
+     * {@link #tick}, which handles many changes (an explosion) in one pass over the particles.
+     */
+    public void wakeAround(int blockX, int blockY, int blockZ) {
+        if (activeCount() == 0 || wakeEverything) {
+            return;
+        }
+        if (pendingWakes.size() >= MAX_PENDING_WAKES) {
+            wakeEverything = true;
+            pendingWakes.clear();
+            return;
+        }
+        pendingWakes.add(BlockPos.asLong(blockX, blockY, blockZ));
+    }
+
+    /** Resets the sleep counters of the particles around the blocks passed to {@link #wakeAround}. */
+    void applyWakes() {
+        ParticleSoA p = particles;
+        if (pendingWakes.isEmpty() && !wakeEverything || p == null) {
+            return;
+        }
+        if (wakeEverything) {
+            Arrays.fill(p.sleepTicks, 0, p.activeCount, (short) 0);
+        } else {
+            wakeBlocks.clear();
+            for (int w = 0; w < pendingWakes.size(); w++) {
+                long key = pendingWakes.getLong(w);
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            wakeBlocks.add(BlockPos.offset(key, dx, dy, dz));
+                        }
+                    }
+                }
+            }
+            for (int i = 0; i < p.activeCount; i++) {
+                if (p.sleepTicks[i] != 0 && wakeBlocks.contains(BlockPos.asLong(
+                        p.originX + (int) Math.floor(p.posX[i]),
+                        p.originY + (int) Math.floor(p.posY[i]),
+                        p.originZ + (int) Math.floor(p.posZ[i])))) {
+                    p.sleepTicks[i] = 0;
+                }
+            }
+        }
+        pendingWakes.clear();
+        wakeEverything = false;
+        generation++;
+    }
+
+    /** The chunk ({@link ChunkKeys}) particle {@code i} is in. */
+    public long chunkOf(int i) {
+        ParticleSoA p = particles;
+        return ChunkKeys.ofBlock(p.originX + (int) Math.floor(p.posX[i]), p.originZ + (int) Math.floor(p.posZ[i]));
+    }
+
+    /** Adds the chunk ({@link ChunkKeys}) of every particle to {@code out}; allocates nothing. */
+    public void collectChunks(LongSet out) {
+        ParticleSoA p = particles;
+        if (p == null || p.activeCount == 0) {
+            return;
+        }
+        // Particles spawn 64 to a block and mostly stay near their neighbours in the arrays: skip repeats cheaply.
+        long last = chunkOf(0);
+        out.add(last);
+        for (int i = 1; i < p.activeCount; i++) {
+            long chunk = chunkOf(i);
+            if (chunk != last) {
+                out.add(chunk);
+                last = chunk;
+            }
+        }
+    }
+
+    /**
+     * Picks every particle in one of {@code chunks} ({@link ChunkKeys}) for the next
+     * {@link #removeMarked}.
+     *
+     * @return the number of particles picked (not counting those picked before)
+     */
+    public int markInChunks(LongSet chunks) {
+        ParticleSoA p = particles;
+        if (p == null || chunks.isEmpty()) {
+            return 0;
+        }
+        int picked = 0;
+        for (int i = 0; i < p.activeCount; i++) {
+            if (!marks[i] && chunks.contains(chunkOf(i))) {
+                marks[i] = true;
+                picked++;
+            }
+        }
+        return picked;
+    }
+
+    /**
+     * Records particles that left the simulated area (their chunk stopped ticking or was unloaded, or the server
+     * stopped), for {@link #condensedOutside()} and {@link #removedOutside()}.
+     *
+     * @param condensed particles that became vanilla blocks
+     * @param removed   particles removed without a block (fewer than 64 left, no free block, chunk not loaded)
+     */
+    public void countLeftSimulation(int condensed, int removed) {
+        condensedOutside += condensed;
+        removedOutside += removed;
+    }
+
+    /** Particles that became vanilla blocks because their chunk left the simulated area, since creation. */
+    public long condensedOutside() {
+        return condensedOutside;
+    }
+
+    /** Particles removed without a block because their chunk left the simulated area, since creation. */
+    public long removedOutside() {
+        return removedOutside;
+    }
+
+    /**
      * Removes all particles and frees their arrays until the next spawn.
      *
      * @return the number of particles removed
@@ -492,6 +627,8 @@ public final class FluidSimulation {
         occupancy = null;
         generation++;
         voxels.clear();
+        pendingWakes.clear();
+        wakeEverything = false;
         stats.reset();
         return removed;
     }
@@ -520,6 +657,7 @@ public final class FluidSimulation {
         if (level != null) {
             voxels.ensureCached(level, particles);
         }
+        applyWakes();
         long voxelsDone = System.nanoTime();
         solver.step();
         generation++;

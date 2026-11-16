@@ -34,6 +34,8 @@ public final class CauldronFilling {
     public static final int LAVA = 4;
     /** Fill state of any other cauldron (powder snow), which takes nothing. */
     public static final int OTHER = 5;
+    /** {@link World#fillState} of a block in an unloaded chunk: takes nothing, keeps what it collected. */
+    public static final int UNKNOWN = 6;
     /** Height above a cauldron's top, in blocks, within which particles count as on its rim. */
     static final float RIM_HEIGHT = 0.3f;
     /** Particles that raise a water cauldron from level {@code i} to {@code i + 1}; they add up to 64. */
@@ -41,7 +43,10 @@ public final class CauldronFilling {
 
     /** What the cauldron filling needs from the level. */
     public interface World {
-        /** {@link #EMPTY}, a water level 1..3, {@link #LAVA}, {@link #OTHER} or {@link #NOT_A_CAULDRON}. */
+        /**
+         * {@link #EMPTY}, a water level 1..3, {@link #LAVA}, {@link #OTHER}, {@link #NOT_A_CAULDRON} or, if the block is
+         * not loaded, {@link #UNKNOWN}.
+         */
         int fillState(long key);
 
         /** Changes the cauldron at {@code key} to a new fill state. */
@@ -136,14 +141,15 @@ public final class CauldronFilling {
 
     /**
      * Gives back the particles of cauldrons that can no longer take them: broken, turned into another kind, or full.
-     * Call now and then (the server does it once a second).
+     * Cauldrons in unloaded chunks keep theirs. Call now and then (the server does it once a second).
      */
     public void returnStale(World world) {
         for (int k = pendingKeys.size() - 1; k >= 0; k--) {
             long key = pendingKeys.getLong(k);
             int stored = pending.get(key);
             byte material = (byte) (stored >>> 16);
-            if (!accepts(material, world.fillState(key))) {
+            int state = world.fillState(key);
+            if (state != UNKNOWN && !accepts(material, state)) {
                 world.giveBack(key, material, stored & 0xFFFF);
                 setPending(key, material, 0);
             }

@@ -18,8 +18,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 
 /**
- * {@code /fluidphysics stats | clear | spawn <material> [blocks] [pos] | limit [max]}, for operators (permission level 2,
- * like {@code /tick}). All subcommands act on the level of the command source.
+ * {@code /fluidphysics stats | clear | spawn <material> [blocks] [pos] | limit [max] | floodgates [on|off]}, for
+ * operators (permission level 2, like {@code /tick}). All subcommands act on the level of the command source.
  */
 public final class FluidPhysicsCommand {
     /** Most blocks one spawn fills: 512 blocks of 64 particles are the hard cap of 32,768 particles. */
@@ -58,7 +58,11 @@ public final class FluidPhysicsCommand {
                 .then(Commands.literal("limit")
                         .executes(ctx -> showLimit(ctx.getSource()))
                         .then(Commands.argument("max", IntegerArgumentType.integer(0, ParticleSoA.MAX_PARTICLES))
-                                .executes(ctx -> setLimit(ctx.getSource(), IntegerArgumentType.getInteger(ctx, "max"))))));
+                                .executes(ctx -> setLimit(ctx.getSource(), IntegerArgumentType.getInteger(ctx, "max")))))
+                .then(Commands.literal("floodgates")
+                        .executes(ctx -> showFloodgates(ctx.getSource()))
+                        .then(Commands.literal("on").executes(ctx -> setFloodgates(ctx.getSource(), true)))
+                        .then(Commands.literal("off").executes(ctx -> setFloodgates(ctx.getSource(), false)))));
     }
 
     private static BlockPos sourceBlock(CommandSourceStack source) {
@@ -143,7 +147,8 @@ public final class FluidPhysicsCommand {
         int active = simulation.activeCount();
         String message = "Fluid physics in " + dimension + ": " + active + " particles ("
                 + simulation.countResting() + " resting), limit " + simulation.limit() + ", "
-                + simulation.capacity() + " allocated\n"
+                + simulation.capacity() + " allocated, " + ServerSimulations.ticketCount(level)
+                + " chunks kept loaded\n"
                 + StatsReport.simulationLines(simulation) + "\n"
                 + network + "\n"
                 + "  all dimensions: " + total + " particles";
@@ -173,6 +178,23 @@ public final class FluidPhysicsCommand {
                 ? "; particles above it stay until they condense or are cleared" : "");
         source.sendSuccess(() -> Component.literal(message), true);
         return max;
+    }
+
+    private static int showFloodgates(CommandSourceStack source) {
+        boolean on = ServerSimulations.floodgatesEnabled();
+        int pending = ServerSimulations.floodgatesPending(source.getLevel());
+        source.sendSuccess(() -> Component.literal(on
+                ? "Floodgates are on: removing a block that holds back vanilla water or lava turns the source blocks "
+                        + "behind it into particles (" + pending + " openings waiting here)"
+                : "Floodgates are off: vanilla water and lava behind a removed block stay vanilla"), false);
+        return on ? 1 : 0;
+    }
+
+    private static int setFloodgates(CommandSourceStack source, boolean on) {
+        ServerSimulations.setFloodgates(on);
+        source.sendSuccess(() -> Component.literal("Floodgates " + (on ? "on" : "off")
+                + " in every dimension until the server stops"), true);
+        return on ? 1 : 0;
     }
 
     private static String dimensionName(ServerLevel level) {

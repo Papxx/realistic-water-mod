@@ -67,8 +67,11 @@ public final class StatsReport {
         }
 
         text.append("  voxel cache: ").append(simulation.voxels().size()).append(" solid blocks in ")
-                .append(simulation.voxels().cachedSectionCount()).append(" sections; ")
-                .append(simulation.removedInVoid()).append(" particles fell out of the world");
+                .append(simulation.voxels().cachedSectionCount()).append(" sections of ")
+                .append(simulation.voxels().cachedColumnCount()).append(" chunks; ")
+                .append(simulation.removedInVoid()).append(" particles fell out of the world, ")
+                .append(simulation.condensedOutside()).append(" became blocks and ")
+                .append(simulation.removedOutside()).append(" were removed when their chunk left the simulation");
         return text.toString();
     }
 

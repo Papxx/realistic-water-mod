@@ -90,6 +90,12 @@ class CauldronFillingTest {
         assertEquals(1, world.states.get(CAULDRON));
         assertEquals(9, filling.pendingCount(CAULDRON));
 
+        // Its chunk is not loaded: the cauldron keeps the 9 particles and nothing is read from it.
+        world.states.put(CAULDRON, CauldronFilling.UNKNOWN);
+        filling.returnStale(world);
+        assertEquals(List.of(), world.givenBack);
+        assertEquals(9, filling.pendingCount(CAULDRON));
+
         // The cauldron is broken: the 9 particles come back out.
         world.states.remove(CAULDRON);
         filling.returnStale(world);

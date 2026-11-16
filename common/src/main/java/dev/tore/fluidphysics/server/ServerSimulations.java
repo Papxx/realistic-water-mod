@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.tore.fluidphysics.server;
 
+import dev.tore.fluidphysics.FluidPhysicsCommon;
 import dev.tore.fluidphysics.network.FluidClearPayload;
 import dev.tore.fluidphysics.network.FluidCondensePayload;
 import dev.tore.fluidphysics.network.FluidImpulsePayload;
@@ -14,15 +15,17 @@ import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * The server's simulations, one per level, and the server-side entry points for everything that changes particles.
  * Each change is applied to the server's simulation and sent as an event to the clients that can see it, which apply
  * it to their own simulations.
  *
- * <p>Server thread only. The loader modules call {@link #tick} after each level tick and {@link #onServerStopped} when
- * the server stops.
+ * <p>Server thread only. The loader modules call {@link #tick} after each level tick, {@link #onServerStopping} when the
+ * server starts to stop and {@link #onServerStopped} when it has stopped.
  */
 public final class ServerSimulations {
     /** Default particle limit per level on a server (CLAUDE.md §3.1). */
@@ -31,6 +34,9 @@ public final class ServerSimulations {
     private static final Reference2ObjectOpenHashMap<ServerLevel, FluidSimulation> SIMULATIONS =
             new Reference2ObjectOpenHashMap<>();
     private static final Reference2ObjectOpenHashMap<ServerLevel, ServerInteractions> INTERACTIONS =
+            new Reference2ObjectOpenHashMap<>();
+    /** Floodgates per level, created when the first opening is reported (only while they are enabled). */
+    private static final Reference2ObjectOpenHashMap<ServerLevel, ServerFloodgates> FLOODGATES =
             new Reference2ObjectOpenHashMap<>();
     /** Particles removed by {@link #removeMarked}, per material: block to count, and the blocks in order. */
     private static final Long2IntOpenHashMap[] REMOVED = new Long2IntOpenHashMap[ParticleSoA.MATERIAL_COUNT];
@@ -51,6 +57,8 @@ public final class ServerSimulations {
     /** Shared by all levels: they tick one after another on the server thread. */
     private static WorkerPool pool;
     private static int limit = DEFAULT_LIMIT;
+    /** Whether removed blocks turn the vanilla sources behind them into particles (Plan.md §7.3.3); off by default. */
+    private static boolean floodgates;
 
     private ServerSimulations() {
     }
@@ -85,19 +93,32 @@ public final class ServerSimulations {
 
     /** Advances the particles of {@code level} by one tick; call after the level ticked. */
     public static void tick(ServerLevel level) {
+        ServerFloodgates gates = FLOODGATES.get(level);
+        if (gates != null && level.tickRateManager().runsNormally()) {
+            // Before the simulation: it may create it.
+            gates.tick();
+        }
         FluidSimulation simulation = SIMULATIONS.get(level);
+        if (simulation == null) {
+            return;
+        }
+        ServerInteractions interactions = INTERACTIONS.get(level);
         // /tick freeze stops the level, so it stops the particles too.
-        if (simulation != null && level.tickRateManager().runsNormally()) {
-            // The simulation records statistics only for ticks with particles; the interactions join that record.
-            boolean recorded = simulation.activeCount() > 0;
-            simulation.tick(level);
-            long start = System.nanoTime();
-            long allocatedBefore = AllocationMeter.currentThreadBytes();
-            INTERACTIONS.get(level).tick(simulation);
-            if (recorded) {
-                simulation.stats().addInteractions(System.nanoTime() - start,
-                        AllocationMeter.currentThreadBytes() - allocatedBefore);
-            }
+        if (!level.tickRateManager().runsNormally()) {
+            // Chunks still load and unload while frozen: keep the particles inside the simulated area.
+            interactions.guardChunks(simulation);
+            return;
+        }
+        // The simulation records statistics only for ticks with particles; the interactions join that record.
+        boolean recorded = simulation.activeCount() > 0;
+        simulation.tick(level);
+        long start = System.nanoTime();
+        long allocatedBefore = AllocationMeter.currentThreadBytes();
+        interactions.guardChunks(simulation);
+        interactions.tick(simulation);
+        if (recorded) {
+            simulation.stats().addInteractions(System.nanoTime() - start,
+                    AllocationMeter.currentThreadBytes() - allocatedBefore);
         }
     }
 
@@ -107,12 +128,39 @@ public final class ServerSimulations {
         return interactions == null ? 0 : interactions.stoneForming();
     }
 
+    /** Chunks of {@code level} kept loaded because they hold particles. */
+    public static int ticketCount(ServerLevel level) {
+        ServerInteractions interactions = INTERACTIONS.get(level);
+        return interactions == null ? 0 : interactions.ticketCount();
+    }
+
+    /**
+     * Turns the particles of every level into vanilla blocks (Plan.md §7.5) and releases their chunk tickets. Call when
+     * the server starts to stop, before the worlds are saved, so the mass survives the restart.
+     */
+    public static void onServerStopping(MinecraftServer server) {
+        for (ServerLevel level : server.getAllLevels()) {
+            FluidSimulation simulation = SIMULATIONS.get(level);
+            if (simulation == null) {
+                continue;
+            }
+            int particles = simulation.activeCount();
+            int blocks = INTERACTIONS.get(level).condenseAll(simulation);
+            if (particles > 0) {
+                FluidPhysicsCommon.LOGGER.info("Turned {} particles in {} into {} blocks before saving ({} left over)",
+                        particles, level.dimension(), blocks, particles - blocks * ParticleSoA.PARTICLES_PER_BLOCK);
+            }
+        }
+    }
+
     /** Drops all simulations and stops the solver threads, so the next server (another world) starts fresh. */
     public static void onServerStopped() {
         SIMULATIONS.clear();
         INTERACTIONS.clear();
+        FLOODGATES.clear();
         FluidNetworking.sent().reset();
         limit = DEFAULT_LIMIT;
+        floodgates = false;
         if (pool != null) {
             pool.close();
             pool = null;
@@ -129,6 +177,43 @@ public final class ServerSimulations {
         for (FluidSimulation simulation : SIMULATIONS.values()) {
             simulation.setLimit(limit);
         }
+    }
+
+    public static boolean floodgatesEnabled() {
+        return floodgates;
+    }
+
+    /**
+     * Turns the floodgates (Plan.md §7.3.3) on or off for every level until the server stops. Turning them off forgets
+     * the openings that were still waiting.
+     */
+    public static void setFloodgates(boolean enabled) {
+        floodgates = enabled;
+        if (!enabled) {
+            FLOODGATES.clear();
+        }
+    }
+
+    /** Openings in {@code level} whose sources still wait to be converted. */
+    public static int floodgatesPending(ServerLevel level) {
+        ServerFloodgates gates = FLOODGATES.get(level);
+        return gates == null ? 0 : gates.pending();
+    }
+
+    /**
+     * Called before every block change in a server level while the floodgates are enabled: remembers the block if it
+     * stops holding vanilla water or lava back.
+     */
+    public static void beforeBlockChange(ServerLevel level, BlockPos pos, BlockState next) {
+        if (!floodgates) {
+            return;
+        }
+        ServerFloodgates gates = FLOODGATES.get(level);
+        if (gates == null) {
+            gates = new ServerFloodgates(level);
+            FLOODGATES.put(level, gates);
+        }
+        gates.beforeChange(pos, next);
     }
 
     /** Whether any level holds more particles than the limit (possible right after lowering it). */
@@ -230,6 +315,10 @@ public final class ServerSimulations {
         ServerInteractions interactions = INTERACTIONS.get(level);
         if (interactions != null) {
             interactions.clear();
+        }
+        ServerFloodgates gates = FLOODGATES.get(level);
+        if (gates != null) {
+            gates.clear();
         }
         // Sent even if the server had none: clients may hold particles that drifted apart from the server's.
         FluidNetworking.sendToLevel(level, FluidClearPayload.INSTANCE);

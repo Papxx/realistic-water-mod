@@ -353,13 +353,13 @@ Execute these steps sequentially and run `./gradlew build` after each step:
   - Open: the network line is only non-zero with players connected (not tested yet); no Spark profile recorded.
 - [ ] **Step 6b:** Neighbor list caching, Morton re-sorting, sleeping islands, time budget. Must bring `PbfSolverTest` to the 3.5 ms Step 2 target (about 5 ms after Step 2), then lower its enforced limit from 8 ms to 3.5 ms. Spatially ordered buckets and per-substep neighbour lists already exist (§3.2); the open levers are sleeping islands (§6.1.7) and reusing neighbour lists across substeps.
 - [ ] **Step 6c:** Instanced rendering, GPU buffer reuse, culling/LOD, interpolation.
-- [ ] **Step 6d:** Network batching/rate limits, chunk-unload handling, voxel-cache LRU.
+- [ ] **Step 6d:** Network batching/rate limits, chunk-unload handling, voxel-cache LRU. (Chunk-unload handling was done in Step 7, §7.7.)
 - [ ] **Step 6e (optional):** Vector API path + physics thread with double buffering.
 
 
 ---
 
-## 7. Critical Edge Cases, 1.21 API Traps & Polish (Addendum)
+## 7. Phase 7: Critical Edge Cases, 1.21 API Traps & Polish (Addendum)
 
 ### 7.1 The 1.21 `DeltaTracker` & 144+ FPS Interpolation (No 20-TPS Stutter!)
 - **API Trap:** In Minecraft 1.21+, render events do NOT pass `float partialTick` directly anymore; they pass `DeltaTracker`. Always extract partial ticks via:
@@ -392,6 +392,7 @@ Execute these steps sequentially and run `./gradlew build` after each step:
   1. Immediately invalidate that `BlockPos` in `ChunkVoxelCache.invalidate(packedBlockPos)`.
   2. **Wake up adjacent sleeping particles:** Query `SpatialHashGrid` in a $3 \times 3 \times 3$ block radius around the changed `BlockPos` and reset `soa.sleepTicks[i] = 0` for all particles found. Otherwise, sleeping particles will float in mid-air after the floor/wall is removed!
   3. **Vanilla Fluid Conversion Hook (Optional Config):** When a Vanilla Water/Lava block updates next to an opened floodgate, optionally convert that Vanilla block into 64 physics particles so dams burst naturally.
+- *Implemented in Steps 5 and 7 (§7.7):* the changed block is re-read into the cache instead of invalidated, the wake-up is applied at the start of the next tick, and the floodgates are a server command toggle (`/fluidphysics floodgates`), off by default.
 
 ### 7.4 Surface Tension & Slime Stringiness (Visual Polish)
 - **Water Foam & Droplets:** If a water particle has fewer than 6 neighbors (`isolated droplet`) or speed $> 0.45\text{f}$, blend its color toward white (`#E8F7FF`) and slightly shrink its render scale (`0.16f`) so splashes look like real spray droplets.
@@ -400,7 +401,62 @@ Execute these steps sequentially and run `./gradlew build` after each step:
 ### 7.5 Chunk Unload & World Save Guard (Anti-Memory-Leak)
 - When a chunk unloads or the server stops (`ServerChunkEvents.CHUNK_UNLOAD` / `LevelEvent.Unload`):
   - Immediately run **forced condensation** on all particles inside that chunk (group every 64 particles into the nearest free `BlockPos` as a Vanilla fluid/sand/slime block and remove the rest). This prevents orphaned particles in unloaded chunks and preserves mass across restarts.
+- *Implemented differently in Step 7 (§7.7):* the unload events fire after the chunk was saved, so the particles condense when their chunk leaves the simulated area, and a chunk ticket keeps the chunk loaded until then.
 
 ### 7.6 Multi-Core Scaling (Java 21 Parallel Solver)
 - When `soa.activeCount > 4096`, execute the PBF density (`lambda[i]`) and position correction (`deltaPos`) loops in parallel chunks (e.g., batches of 512 particles via `ForkJoinPool.commonPool()`) while keeping array writes strictly indexed by particle `i` (no race conditions!).
 - *Implemented differently in Step 2:* all solver passes run on the solver's own `WorkerPool` (one contiguous share per thread, from 2048 particles up), not on `ForkJoinPool.commonPool()`. The common pool is shared with the game and other mods, and submitting tasks to it allocates. Writes stay strictly indexed by particle.
+
+### 7.7 Execution
+- [x] **Step 7 (Edge cases):** Implement the open parts of §7: wake-up on block changes (7.3.2), floodgates (7.3.3, optional) and forced condensation on chunk unload and server stop (7.5). 7.1, 7.2, 7.4 and 7.6 were already covered by Steps 2 and 4.
+  - **Done (2026-11-16).**
+  - Wake-up (7.3.2): `Simulations.onBlockChanged` (`LevelMixin`, both sides) wakes the particles in the 3 x 3 x 3 blocks around a block whose mask or tag changed in the voxel cache. Changes are collected and applied in one pass at the start of the next tick (`FluidSimulation.wakeAround`); more than 1,024 changes between two ticks (an explosion) wake every particle. Until sleeping islands exist (Step 6b) this only keeps particles whose floor just vanished from condensing, since the solver still simulates sleeping particles.
+  - Chunk guard (7.5), *deviation:* the loaders' unload events are not used. Fabric's `CHUNK_UNLOAD` (both versions) and NeoForge's `ChunkEvent.Unload` (1.21.11) fire after the chunk was saved, so blocks placed then are lost. Also, between two ticks a chunk can leave both the simulation and the loading distance of a player and then unload early in the next level tick. Instead `server/ParticleChunkGuard` runs after every level tick (also under `/tick freeze`). Every simulated chunk that holds particles gets a chunk ticket (`server/ParticleTickets`: level 33, loads the chunk without ticking it; 1.21.1 uses `TicketType.create` + `addRegionTicket`, 1.21.11 a `TicketType` with `FLAG_LOADING` registered as `fluidphysics:particles` + `addTicketWithRadius`). Once such a chunk is loaded but no longer in block-ticking range (players gone, `forceload remove`), its particles become vanilla blocks through ordinary `setBlock` calls (`interaction/ForcedCondensation`) and the ticket is released. Particles in an unloaded chunk (should not happen) are removed. Tickets of chunks without particles are released once a second.
+  - Forced condensation: per chunk and material, `C` particles become `C / 64` blocks at the lowest occupied blocks that can take one (the fuller one first), each taking the 64 nearest particles of its group. The rest (fewer than 64 per chunk and material, or no free block) is removed; nothing is created.
+  - Server stop: `ServerSimulations.onServerStopping` (Fabric `SERVER_STOPPING`, NeoForge `ServerStoppingEvent`, both before the worlds are saved) turns every particle into blocks and logs how many.
+  - Voxel cache: each chunk column remembers the `LevelChunk` it was read from, and `ensureCached` drops columns whose chunk was unloaded or loaded again (on a client: forgotten and sent again). The cache keeps no unloaded chunks and misses no block changes made while a client did not see a chunk.
+  - Client: before each tick, particles in chunks the client does not have are removed (it gets no condense events for chunks it no longer tracks).
+  - Cauldrons in unloaded chunks keep their collected particles instead of loading the chunk (`CauldronFilling.UNKNOWN`).
+  - Floodgates (7.3.3): `/fluidphysics floodgates [on|off]`, off by default and not saved (resets when the server stops, like `limit`). A `LevelMixin` hook at the head of `setBlock` notes server blocks that change from having a collision shape to having none (broken glass, retracted piston, explosion). The vanilla water and lava source blocks beside and above such an opening become 64 particles each, moving towards it at 1 block/s, and each converted source counts as an opening itself, so the reservoir drains at and above the breach. At most 16 blocks per tick; without room for 64 particles the opening waits. Waterlogged blocks stay as they are, and opening a door or trapdoor does not count (their open shape still collides).
+  - Stats: `/fluidphysics stats` shows the chunks kept loaded, the cached chunk columns and how many particles became blocks or were removed when their chunk left the simulation (the last two also in `/fluidphysics_client stats`).
+  - Verified: `./gradlew build` (102 tests per version; new tests for wake-up, chunk collection, forced condensation including zero allocations, floodgates, cauldrons in unloaded chunks and the command tree). On the NeoForge dedicated servers for 1.21.1 and 1.21.11 over RCON: 512 falling water particles in a force-loaded chunk became exactly 8 water sources right after `forceload remove` ("512 became blocks and 0 were removed"), and particles spawned just before `stop` were 8 water sources and a sand block after the restart. With a NeoForge 1.21.11 client connected, teleporting the player 7,400 blocks away right after a spawn (the unload race) also gave 8 sources and lost nothing. A 3 x 3 x 3 vanilla reservoir behind a broken wall block turned into 1,152 particles (its upper 18 sources) and kept its bottom 9. The Fabric servers start on both versions (ticket type registered) and stop at the EULA.
+  - Open: particles that flow into a chunk outside the simulated area lose their remainder there each time (there is no wall at the boundary). A client whose view distance is smaller than the server's simulation distance drops particles the server keeps (like the missing resync, §6.3.3). Floodgates are not saved (no config file yet). The client-side removal was not observed directly in game; client and server only ran without errors.
+
+---
+
+## 8. Phase 8: Smooth Iso-Surface Fluid Meshing & Wet-Look Shading (Marching Cubes Metaballs)
+
+Goal: water, lava and slime render as one connected, glossy liquid surface instead of single micro-cubes: a smooth iso-surface / metaball mesh with organic puddle edges, concentric ripple rings where a stream of water lands, transparency, depth-dependent turquoise and white specular highlights. Sand stays granular cubes.
+
+### 8.1 Sparse Block-Local Scalar Density Field (`client/render/FluidDensityField.java`)
+- Input: the render-interpolated particle positions (`rx, ry, rz`, §7.1) with `partialTick = DeltaTracker.getGameTimeDeltaPartialTick(false)`.
+- Grid: a fine 3D scalar field with cell size `ds = 0.125f` (8x8x8 sub-cells per Minecraft block).
+- **Sparse active tiles:** evaluate the field **only** in active bounding boxes / 4x4x4-block tiles that actually contain particles. Allocation-free through reusable `float[]` buffers, so FPS stay high.
+- **Metaball kernel:** every particle adds a smooth contribution `w = max(0, 1 - (r / R)^2)^3` within radius `R = 0.32f` to the surrounding grid nodes.
+- **Floor & wall wetting (flat puddles instead of spheres):** if a particle rests on a solid sub-voxel of the `ChunkVoxelCache`, stretch its kernel horizontally (`1.35x` in X/Z) and squash it vertically (`0.65x` in Y), so flat, organic puddles with thin edges and small droplet islands form on the ground.
+
+### 8.2 Real-Time Marching Cubes Iso-Surface Extraction (`MarchingCubesMesher.java`, `MarchingCubesTables.java`)
+- Extract the iso-surface at `isoLevel = 0.35f` with the classic 256-entry `EDGE_TABLE` and `TRI_TABLE` (complete tables in `MarchingCubesTables.java`, no placeholders or partial arrays).
+- Vertex positions: linear interpolation along the grid edges.
+- **Analytic smooth normals + ripples:** per vertex, the smooth surface normal from the density gradient by central differences in the field (`N = normalize(grad(density))`, oriented out of the fluid). For moving particles, add a fine procedural sine perturbation (concentric ripple perturbation driven by the local particle velocity `velX, velY, velZ`), so concentric wave rings show on the surface under an incoming stream of water.
+
+### 8.3 Wet-Look Shading: Beer-Lambert Absorption, Fresnel & Blinn-Phong Specular (`SmoothFluidRenderer.java`)
+- **Triangles as quads:** Minecraft's translucent render types take quads, so every marching-cubes triangle `(v0, v1, v2)` is emitted as the quad `(v0, v1, v2, v2)` (4th vertex duplicates `v2`) through the 1.21 `VertexConsumer` chain (§2D).
+- **Per-vertex colour and gloss (water):**
+  - View vector `V = normalize(cameraPos - vertexPos)`, light vector `L = normalize(vec3(0.35f, 0.9f, 0.25f))`, halfway vector `H = normalize(L + V)`.
+  - **Beer-Lambert thickness/depth:** the local particle density at the vertex blends from thin edges (light cyan-turquoise `RGB(38, 198, 208)`, alpha `0.58f`) to deep pools (rich emerald-turquoise `RGB(6, 102, 115)`, alpha `0.86f`).
+  - **Fresnel:** `fresnel = 0.04f + 0.96f * pow(1.0f - max(dot(N, V), 0.0f), 4.0f)`; at grazing angles slightly raise brightness and opacity.
+  - **Blinn-Phong specular (wet gloss):** `spec = pow(max(dot(N, H), 0.0f), 48.0f) * 0.85f`, added directly to R/G/B; alpha rises up to `0.96f` at highlights, so white highlights shine on wave crests and droplet edges.
+- **Materials:** smooth mesh for `WATER`, `LAVA` (glowing orange-yellow with a dark crust at cooler edges, `FULL_BRIGHT` lightmap) and `SLIME` (translucent emerald green, strong gloss). `SAND` keeps rendering as granular particles.
+- **Command:** `/fluidphysics rendermode <smooth|cubes>` (default `smooth`).
+
+### 8.4 Verified Facts & Implementation Notes (checked 2026-11-16)
+1. **Render type:** `RenderType.translucent()` exists in 1.21.1 but **not in 1.21.11** (checked in the NeoForge 21.11.48 sources: `rendertype.RenderTypes` only has `translucentMovingBlock()`, which samples the block atlas). The `text_background` type used by `ParticleBatchRenderer` since Step 4 exists in both versions (quads, position + colour + lightmap, alpha blending, back-face culling, depth test, lightmap and fog) and takes per-vertex colours unchanged; the `(v0, v1, v2, v2)` trick works with it as well. All shading in §8.3 is computed on the CPU per vertex, so the vertex format needs no normal or UV.
+2. **Sorting:** `RenderType.draw(MeshData)` skips vanilla's per-quad sort (Step 4), so the mesher sorts its triangles far to near itself (e.g. radix sort on the centroid distance, like `ParticleMesher`) for correct blending.
+3. **Command root:** `/fluidphysics` is a server command (permission level 2), the render mode is a client setting. Fabric reports a client command that shares a server command's root but lacks the subcommand as an error instead of forwarding it (Step 6a). So either a client subcommand under `/fluidphysics_client` (like `stats`) or a server subcommand without permission that sends an S2C payload to the player; decide when implementing.
+4. **Closed mesh:** the classic table (built with complement symmetry) is known to leave cracks between cells on ambiguous faces. For a crack-free mesh, generate the table with one fixed face disambiguation rule (a generator script in `tools/` that writes the literal arrays; fits the clean-room policy) and keep the classic format (`int[256]` edge masks, `int[256][16]` triangles, `-1` terminated).
+5. **Depth for Beer-Lambert:** on the iso-surface the field equals `isoLevel` by definition, so the "local particle density" must come from elsewhere, e.g. particles per block (smoothed between blocks) or the field sampled a little inside along `-N`.
+6. **Cost:** with `R = 0.32` and `ds = 0.125` a particle touches about 125 nodes (about 4 million kernel evaluations per frame at 32,768 particles), and the field is rebuilt every frame. Measure with `/fluidphysics_client stats` and plan it together with Step 6c.
+
+### 8.5 Execution
+- [ ] **Step 8 (Smooth surface):** Implement §8.1–8.3 with `FluidDensityField`, `MarchingCubesMesher`, `MarchingCubesTables` and `SmoothFluidRenderer`, plus the render-mode command. Add `MarchingCubesMesherTest`: a water puddle and a water stream produce valid, closed triangles and normalised normals (no `NaN`). Run `./gradlew test` and build all four targets (`1.21.1` and `1.21.11` for Fabric and NeoForge); fix every error until `BUILD SUCCESSFUL`.

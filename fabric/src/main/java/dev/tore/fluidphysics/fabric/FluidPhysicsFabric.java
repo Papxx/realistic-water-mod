@@ -25,6 +25,9 @@ public final class FluidPhysicsFabric implements ModInitializer {
 
         ModRegistry.registerBlocks((id, block) -> Registry.register(BuiltInRegistries.BLOCK, id, block));
         ModRegistry.registerItems((id, item) -> Registry.register(BuiltInRegistries.ITEM, id, item));
+        //? if >=1.21.11 {
+        ModRegistry.registerTicketTypes((id, type) -> Registry.register(BuiltInRegistries.TICKET_TYPE, id, type));
+        //?}
         ItemGroupEvents.modifyEntriesEvent(ModRegistry.TOOLS_TAB)
                 .register(entries -> ModRegistry.addToCreativeTab(ModRegistry.TOOLS_TAB, entries::accept));
         ItemGroupEvents.modifyEntriesEvent(ModRegistry.NATURAL_TAB)
@@ -39,6 +42,8 @@ public final class FluidPhysicsFabric implements ModInitializer {
         CommandRegistrationCallback.EVENT.register(
                 (dispatcher, buildContext, selection) -> FluidPhysicsCommand.register(dispatcher));
         ServerTickEvents.END_WORLD_TICK.register(ServerSimulations::tick);
+        // Before the worlds are saved: the particles become blocks while their chunks are still loaded.
+        ServerLifecycleEvents.SERVER_STOPPING.register(ServerSimulations::onServerStopping);
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> ServerSimulations.onServerStopped());
     }
 }

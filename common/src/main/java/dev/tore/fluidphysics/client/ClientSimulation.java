@@ -4,9 +4,12 @@ package dev.tore.fluidphysics.client;
 import dev.tore.fluidphysics.network.FluidCondensePayload;
 import dev.tore.fluidphysics.network.FluidImpulsePayload;
 import dev.tore.fluidphysics.network.FluidSpawnPayload;
+import dev.tore.fluidphysics.physics.ChunkKeys;
 import dev.tore.fluidphysics.physics.FluidSimulation;
 import dev.tore.fluidphysics.physics.ParticleSoA;
 import dev.tore.fluidphysics.physics.WorkerPool;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import java.util.function.LongConsumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -27,6 +30,14 @@ public final class ClientSimulation {
     private static FluidSimulation simulation;
     /** The level {@link #simulation} belongs to; a new level (dimension change, disconnect) drops it. */
     private static ClientLevel level;
+    /** Scratch for {@link #removeOutsideLoadedChunks}: chunks with particles, and those the client does not have. */
+    private static final LongOpenHashSet OCCUPIED = new LongOpenHashSet();
+    private static final LongOpenHashSet MISSING = new LongOpenHashSet();
+    private static final LongConsumer FIND_MISSING = chunk -> {
+        if (level.getChunkSource().getChunkNow(ChunkKeys.x(chunk), ChunkKeys.z(chunk)) == null) {
+            MISSING.add(chunk);
+        }
+    };
 
     private ClientSimulation() {
     }
@@ -55,7 +66,28 @@ public final class ClientSimulation {
                 || !current.tickRateManager().runsNormally()) {
             return;
         }
+        removeOutsideLoadedChunks(simulation);
         simulation.tick(current);
+    }
+
+    /**
+     * Removes the particles in chunks this client does not have (Plan.md §7.5): it forgot them (moved away, teleported)
+     * or never received them. The server condenses particles that leave its simulated area and tells the clients
+     * that still see the chunk; a client that no longer sees it gets no event, so it drops the particles itself.
+     */
+    private static void removeOutsideLoadedChunks(FluidSimulation sim) {
+        if (sim.activeCount() == 0) {
+            return;
+        }
+        OCCUPIED.clear();
+        MISSING.clear();
+        sim.collectChunks(OCCUPIED);
+        OCCUPIED.forEach(FIND_MISSING);
+        if (!MISSING.isEmpty()) {
+            int removed = sim.markInChunks(MISSING);
+            sim.removeMarked(null);
+            sim.countLeftSimulation(0, removed);
+        }
     }
 
     public static void onSpawn(FluidSpawnPayload payload) {

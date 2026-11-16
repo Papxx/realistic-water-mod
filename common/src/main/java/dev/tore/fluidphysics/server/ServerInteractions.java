@@ -23,8 +23,8 @@ import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.phys.AABB;
 
 /**
- * The world interactions of one server level's particles: water and lava reactions, cauldron filling and
- * condensation back into vanilla blocks. Decides on the server only; particles are removed through
+ * The world interactions of one server level's particles: water and lava reactions, cauldron filling,
+ * condensation back into vanilla blocks, and keeping the particles inside the simulated chunks. Decides on the server only; particles are removed through
  * {@link ServerSimulations#removeMarked}, which tells the clients, and blocks change through the level as usual.
  *
  * <p>Server thread only; {@link ServerSimulations#tick} calls {@link #tick} after each simulation step.
@@ -42,6 +42,7 @@ final class ServerInteractions {
     private final StoneFormation stone = new StoneFormation();
     private final CauldronFilling cauldrons = new CauldronFilling();
     private final Condensation condensation = new Condensation();
+    private final ParticleChunkGuard chunkGuard;
     private final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
     private long ticks;
     private long now;
@@ -64,7 +65,11 @@ final class ServerInteractions {
     private final CauldronFilling.World cauldronWorld = new CauldronFilling.World() {
         @Override
         public int fillState(long key) {
-            BlockState state = level.getBlockState(pos.set(key));
+            if (!level.isLoaded(pos.set(key))) {
+                // Never load a chunk for this; the cauldron keeps what it collected until it is loaded again.
+                return CauldronFilling.UNKNOWN;
+            }
+            BlockState state = level.getBlockState(pos);
             if (state.is(Blocks.CAULDRON)) {
                 return CauldronFilling.EMPTY;
             }
@@ -153,6 +158,29 @@ final class ServerInteractions {
 
     ServerInteractions(ServerLevel level) {
         this.level = level;
+        this.chunkGuard = new ParticleChunkGuard(level);
+    }
+
+    /**
+     * Keeps the particles inside the simulated chunks (see {@link ParticleChunkGuard}); call after every level tick,
+     * also while the level is frozen.
+     */
+    void guardChunks(FluidSimulation simulation) {
+        chunkGuard.tick(simulation, condenseWorld);
+    }
+
+    /**
+     * Turns every particle into vanilla blocks and releases the chunk tickets; for a stopping server.
+     *
+     * @return the number of vanilla blocks placed
+     */
+    int condenseAll(FluidSimulation simulation) {
+        return chunkGuard.condenseAll(simulation, condenseWorld);
+    }
+
+    /** Chunks kept loaded for their particles. */
+    int ticketCount() {
+        return chunkGuard.ticketCount();
     }
 
     /** Runs the interactions that are due this tick. */
@@ -177,12 +205,13 @@ final class ServerInteractions {
     }
 
     /**
-     * Forgets stone that was still forming and the particles cauldrons collected towards their next level (after
-     * {@code /fluidphysics clear}, which removes every particle).
+     * Forgets stone that was still forming and the particles cauldrons collected towards their next level, and releases
+     * the chunk tickets (after {@code /fluidphysics clear}, which removes every particle).
      */
     void clear() {
         stone.clear();
         cauldrons.clear();
+        chunkGuard.releaseAll();
     }
 
     int stoneForming() {

@@ -3,7 +3,9 @@ package dev.tore.fluidphysics.physics;
 
 import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import it.unimi.dsi.fastutil.objects.Reference2LongOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
@@ -33,6 +35,10 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * {@link #onBlockChanged} when a block changes. Blocks that are not stored read as air: that covers real air,
  * fluids, and sections that are not cached (e.g. in unloaded chunks), so callers must not simulate particles in
  * uncached sections.
+ *
+ * <p>Each chunk column remembers the {@link LevelChunk} its sections were read from. {@link #ensureCached} first drops
+ * the columns whose chunk is gone or was replaced (unloaded, or sent again to a client), so the cache never keeps
+ * blocks of an unloaded chunk or misses changes made while a client did not see the chunk (Plan.md §7.5).
  *
  * <p>Threading: {@link #getMask} may be called from several solver threads at once, but only while nothing changes
  * the cache; all other methods belong to the main thread and must not run during a solver step.
@@ -73,6 +79,10 @@ public final class ChunkVoxelCache {
     private final LongOpenHashSet forcedEmpty = new LongOpenHashSet();
     /** Sections ({@link SectionPos#asLong(int, int, int)}) whose blocks are all in {@link #masks}. */
     private final LongOpenHashSet cachedSections = new LongOpenHashSet();
+    /** Chunk columns ({@link ChunkKeys}) with sections read from a loaded chunk. */
+    private final Long2ObjectOpenHashMap<Column> columns = new Long2ObjectOpenHashMap<>();
+    /** The values of {@link #columns}, for iterating without an iterator. */
+    private final ObjectArrayList<Column> columnList = new ObjectArrayList<>();
     /** Masks of block states whose collision shape does not depend on the position. */
     private final Reference2LongOpenHashMap<BlockState> stateMasks = new Reference2LongOpenHashMap<>();
     private final BlockPos.MutableBlockPos scratchPos = new BlockPos.MutableBlockPos();
@@ -82,6 +92,21 @@ public final class ChunkVoxelCache {
     public ChunkVoxelCache() {
         masks.defaultReturnValue(EMPTY);
         tags.defaultReturnValue((byte) 0);
+    }
+
+    /** A chunk column with cached sections: the chunk they were read from and the range of their section ys. */
+    private static final class Column {
+        final int x;
+        final int z;
+        final LevelChunk chunk;
+        int minSectionY = Integer.MAX_VALUE;
+        int maxSectionY = Integer.MIN_VALUE;
+
+        Column(int x, int z, LevelChunk chunk) {
+            this.x = x;
+            this.z = z;
+            this.chunk = chunk;
+        }
     }
 
     /** Bit index of sub-voxel ({@code sx}, {@code sy}, {@code sz}), each in 0..3. */
@@ -155,6 +180,11 @@ public final class ChunkVoxelCache {
         return cachedSections.size();
     }
 
+    /** Number of chunk columns with sections read from a loaded chunk. */
+    public int cachedColumnCount() {
+        return columnList.size();
+    }
+
     public boolean isSectionCached(int sectionX, int sectionY, int sectionZ) {
         return cachedSections.contains(SectionPos.asLong(sectionX, sectionY, sectionZ));
     }
@@ -165,6 +195,8 @@ public final class ChunkVoxelCache {
         tags.clear();
         forcedEmpty.clear();
         cachedSections.clear();
+        columns.clear();
+        columnList.clear();
         stateMasks.clear();
     }
 
@@ -186,6 +218,7 @@ public final class ChunkVoxelCache {
      * next to it (the solver's speed limit keeps a particle within one block per tick). Main thread only.
      */
     public void ensureCached(Level level, ParticleSoA particles) {
+        dropStaleColumns(level);
         long lastSection = Long.MIN_VALUE;
         for (int i = 0; i < particles.activeCount; i++) {
             int bx = particles.originX + (int) Math.floor(particles.posX[i]);
@@ -230,6 +263,19 @@ public final class ChunkVoxelCache {
         if (chunk == null) {
             return false;
         }
+        Column column = columns.get(ChunkKeys.pack(sectionX, sectionZ));
+        if (column != null && column.chunk != chunk) {
+            // The chunk was loaded again since the column was read; nothing read from the old one is valid.
+            dropColumn(column);
+            column = null;
+        }
+        if (column == null) {
+            column = new Column(sectionX, sectionZ, chunk);
+            columns.put(ChunkKeys.pack(sectionX, sectionZ), column);
+            columnList.add(column);
+        }
+        column.minSectionY = Math.min(column.minSectionY, sectionY);
+        column.maxSectionY = Math.max(column.maxSectionY, sectionY);
         cachedSections.add(sectionKey);
         // Blocks of this section read as air until now.
         version++;
@@ -297,6 +343,36 @@ public final class ChunkVoxelCache {
             tags.put(key, tag);
         }
         return true;
+    }
+
+    /**
+     * Drops every column whose chunk is no longer loaded, or was loaded again as a new chunk object, since its
+     * sections were read. Main thread only; allocates nothing.
+     *
+     * @return the number of columns dropped
+     */
+    public int dropStaleColumns(Level level) {
+        int dropped = 0;
+        for (int c = columnList.size() - 1; c >= 0; c--) {
+            Column column = columnList.get(c);
+            if (level.getChunkSource().getChunkNow(column.x, column.z) != column.chunk) {
+                dropColumn(column);
+                dropped++;
+            }
+        }
+        return dropped;
+    }
+
+    /** Forgets a column: its sections and the column entry. */
+    private void dropColumn(Column column) {
+        for (int sy = column.minSectionY; sy <= column.maxSectionY; sy++) {
+            invalidateSection(column.x, sy, column.z);
+        }
+        columns.remove(ChunkKeys.pack(column.x, column.z));
+        int index = columnList.indexOf(column);
+        int last = columnList.size() - 1;
+        columnList.set(index, columnList.get(last));
+        columnList.remove(last);
     }
 
     /** Drops one section, e.g. when its chunk unloads. */

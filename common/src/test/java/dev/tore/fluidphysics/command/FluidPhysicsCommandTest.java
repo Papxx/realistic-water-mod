@@ -28,7 +28,7 @@ class FluidPhysicsCommandTest {
 
         CommandNode<CommandSourceStack> root = dispatcher.getRoot().getChild("fluidphysics");
         assertNotNull(root);
-        assertEquals(List.of("clear", "limit", "spawn", "stats"), childNames(root));
+        assertEquals(List.of("clear", "floodgates", "limit", "spawn", "stats"), childNames(root));
 
         CommandNode<CommandSourceStack> spawn = root.getChild("spawn");
         assertEquals(List.of("lava", "sand", "slime", "water"), childNames(spawn));
@@ -36,6 +36,7 @@ class FluidPhysicsCommandTest {
         assertNotNull(blocks);
         assertNotNull(blocks.getChild("pos"));
         assertNotNull(root.getChild("limit").getChild("max"));
+        assertEquals(List.of("off", "on"), childNames(root.getChild("floodgates")));
     }
 
     private static List<String> childNames(CommandNode<CommandSourceStack> node) {

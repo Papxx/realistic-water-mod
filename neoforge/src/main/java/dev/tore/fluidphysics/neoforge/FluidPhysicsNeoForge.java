@@ -18,6 +18,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
@@ -41,16 +42,24 @@ public final class FluidPhysicsNeoForge {
                 ServerSimulations.tick(level);
             }
         });
+        // Before the worlds are saved: the particles become blocks while their chunks are still loaded.
+        NeoForge.EVENT_BUS.addListener(ServerStoppingEvent.class,
+                event -> ServerSimulations.onServerStopping(event.getServer()));
         NeoForge.EVENT_BUS.addListener(ServerStoppedEvent.class, event -> ServerSimulations.onServerStopped());
     }
 
-    /** NeoForge fires this once per registry, blocks before items. */
+    /** NeoForge fires this once per registry, blocks before items (and, on 1.21.11, the chunk ticket types). */
     private static void register(RegisterEvent event) {
         if (event.getRegistryKey().equals(Registries.BLOCK)) {
             ModRegistry.registerBlocks((id, block) -> event.register(Registries.BLOCK, id, () -> block));
         } else if (event.getRegistryKey().equals(Registries.ITEM)) {
             ModRegistry.registerItems((id, item) -> event.register(Registries.ITEM, id, () -> item));
         }
+        //? if >=1.21.11 {
+        if (event.getRegistryKey().equals(Registries.TICKET_TYPE)) {
+            ModRegistry.registerTicketTypes((id, type) -> event.register(Registries.TICKET_TYPE, id, () -> type));
+        }
+        //?}
     }
 
     private static void registerPayloads(RegisterPayloadHandlersEvent event) {

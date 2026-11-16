@@ -200,18 +200,20 @@ class FluidSimulationTest {
             sim.spawn(i % 4, i / 4, 0, MATERIAL_WATER, 64, 0f, 0f, 0f);
         }
         for (int t = 0; t < 50; t++) {
+            sim.wakeAround(t % 4, 0, 0);
             sim.advance(-1000);
         }
 
         com.sun.management.ThreadMXBean threads = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
         long before = threads.getCurrentThreadAllocatedBytes();
         for (int t = 0; t < 50; t++) {
+            sim.wakeAround(t % 4, 0, 0);
             sim.advance(-1000);
             sim.applyImpulse(2.0, 1.0, 0.5, 1.5f, 2f);
         }
         sim.removeNear(1, 0, 0, MATERIAL_WATER, 32);
         long allocated = threads.getCurrentThreadAllocatedBytes() - before;
-        assertEquals(0L, allocated, "tick, impulse and condense must not allocate");
+        assertEquals(0L, allocated, "tick, wake-up, impulse and condense must not allocate");
     }
 
     @Test
@@ -300,6 +302,71 @@ class FluidSimulationTest {
         }
         long allocated = threads.getCurrentThreadAllocatedBytes() - before;
         assertEquals(0L, allocated, "marking, removing and counting must not allocate");
+    }
+
+    @Test
+    void blockChangesWakeTheParticlesAroundThemAtTheNextTick() {
+        FluidSimulation sim = new FluidSimulation(POOL, 1000);
+        sim.spawn(0, 0, 0, MATERIAL_WATER, 64, 0f, 0f, 0f);
+        sim.spawn(1, 0, 0, MATERIAL_WATER, 64, 0f, 0f, 0f);
+        sim.spawn(3, 0, 0, MATERIAL_WATER, 64, 0f, 0f, 0f);
+        ParticleSoA p = sim.particles();
+        java.util.Arrays.fill(p.sleepTicks, 0, p.activeCount, (short) 500);
+
+        // The floor under block 0 is removed: blocks 0 and 1 are within the 3 x 3 x 3 around (0, -1, 0), block 3 not.
+        sim.wakeAround(0, -1, 0);
+        assertEquals(64, countSleeping(sim, 3), "nothing wakes before the next tick");
+        sim.applyWakes();
+        assertEquals(0, countSleeping(sim, 0));
+        assertEquals(0, countSleeping(sim, 1));
+        assertEquals(64, countSleeping(sim, 3));
+
+        // More changes than remembered between two ticks: everything wakes.
+        java.util.Arrays.fill(p.sleepTicks, 0, p.activeCount, (short) 500);
+        for (int k = 0; k <= FluidSimulation.MAX_PENDING_WAKES; k++) {
+            sim.wakeAround(100 + k, 50, 0);
+        }
+        sim.applyWakes();
+        assertEquals(0, countSleeping(sim, 3));
+        assertEquals(0, sim.countResting());
+    }
+
+    @Test
+    void chunksOfParticlesAreCollectedAndMarkedPerChunk() {
+        FluidSimulation sim = new FluidSimulation(POOL, 1000);
+        sim.spawn(15, 0, 0, MATERIAL_WATER, 64, 0f, 0f, 0f);
+        sim.spawn(16, 0, 0, MATERIAL_WATER, 64, 0f, 0f, 0f);
+        sim.spawn(-1, 0, -17, MATERIAL_LAVA, 10, 0f, 0f, 0f);
+
+        it.unimi.dsi.fastutil.longs.LongOpenHashSet chunks = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+        sim.collectChunks(chunks);
+        assertEquals(3, chunks.size());
+        assertTrue(chunks.contains(ChunkKeys.pack(0, 0)));
+        assertTrue(chunks.contains(ChunkKeys.pack(1, 0)));
+        assertTrue(chunks.contains(ChunkKeys.pack(-1, -2)));
+
+        it.unimi.dsi.fastutil.longs.LongOpenHashSet one = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+        one.add(ChunkKeys.pack(1, 0));
+        assertEquals(64, sim.markInChunks(one));
+        assertEquals(0, sim.markInChunks(one), "particles picked already are not counted again");
+        assertEquals(64, sim.removeMarked(null));
+        assertEquals(64, countInBlock(sim, 15, 0, 0, MATERIAL_WATER));
+        assertEquals(0, countInBlock(sim, 16, 0, 0, MATERIAL_WATER));
+
+        sim.countLeftSimulation(64, 3);
+        assertEquals(64, sim.condensedOutside());
+        assertEquals(3, sim.removedOutside());
+    }
+
+    private static int countSleeping(FluidSimulation sim, int bx) {
+        ParticleSoA p = sim.particles();
+        int n = 0;
+        for (int i = 0; i < p.activeCount; i++) {
+            if ((int) Math.floor(p.worldX(i)) == bx && p.sleepTicks[i] > 0) {
+                n++;
+            }
+        }
+        return n;
     }
 
     private static int countInBlock(FluidSimulation sim, int bx, int by, int bz, byte material) {
