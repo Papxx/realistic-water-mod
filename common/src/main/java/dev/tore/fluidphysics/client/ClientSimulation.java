@@ -4,6 +4,7 @@ package dev.tore.fluidphysics.client;
 import dev.tore.fluidphysics.network.FluidCondensePayload;
 import dev.tore.fluidphysics.network.FluidImpulsePayload;
 import dev.tore.fluidphysics.network.FluidSpawnPayload;
+import dev.tore.fluidphysics.network.FluidSyncPayload;
 import dev.tore.fluidphysics.physics.ChunkKeys;
 import dev.tore.fluidphysics.physics.FluidSimulation;
 import dev.tore.fluidphysics.physics.ParticleSoA;
@@ -90,17 +91,53 @@ public final class ClientSimulation {
         }
     }
 
+    private static final LongOpenHashSet SYNC_CHUNK = new LongOpenHashSet();
+
+    /** Server's count of particles per chunk differs from ours by more than this share (and {@link #SYNC_SLACK}). */
+    private static final double SYNC_TOLERANCE = 0.1;
+    private static final int SYNC_SLACK = 16;
+
+    /**
+     * Coarse-grid resync (Plan.md §6.3.3): the server's particle counts per block in one chunk. A first snapshot (a
+     * chunk we have not seen particles of, or one that emptied) always replaces our particles there; a refresh only
+     * does when our total differs noticeably, since moving particles never match exactly.
+     */
+    public static void onSync(FluidSyncPayload payload) {
+        FluidSimulation sim = forCurrentLevel();
+        if (sim == null) {
+            return;
+        }
+        long chunk = ChunkKeys.pack(payload.chunkX(), payload.chunkZ());
+        int server = payload.total();
+        int ours = sim.countInChunk(chunk);
+        if (!payload.full() && Math.abs(server - ours) <= Math.max(SYNC_SLACK, (int) (server * SYNC_TOLERANCE))) {
+            return;
+        }
+        SYNC_CHUNK.clear();
+        SYNC_CHUNK.add(chunk);
+        sim.markInChunks(SYNC_CHUNK);
+        sim.removeMarked(null);
+        for (int i = 0; i < payload.blocks().length; i++) {
+            BlockPos pos = BlockPos.of(payload.blocks()[i]);
+            spawnAt(sim, pos, payload.materials()[i], payload.counts()[i], 0f, 0f, 0f);
+        }
+    }
+
+    private static void spawnAt(FluidSimulation sim, BlockPos pos, byte material, int count, float vx, float vy,
+                                float vz) {
+        int spawned = sim.spawn(pos.getX(), pos.getY(), pos.getZ(), material, count, vx, vy, vz);
+        // The server only spawns into blocks particles can occupy. If this client still sees a solid block there,
+        // its removal (a crumbling sand block) is on the way: the spawn event can overtake the block update.
+        if (spawned > 0 && !level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()) {
+            sim.voxels().forceEmpty(pos.getX(), pos.getY(), pos.getZ());
+        }
+    }
+
     public static void onSpawn(FluidSpawnPayload payload) {
         FluidSimulation sim = forCurrentLevel();
         if (sim != null) {
             BlockPos pos = BlockPos.of(payload.packedBlockPos());
-            int spawned = sim.spawn(pos.getX(), pos.getY(), pos.getZ(), payload.materialType(), payload.count(),
-                    payload.dirX(), payload.dirY(), payload.dirZ());
-            // The server only spawns into blocks particles can occupy. If this client still sees a solid block there,
-            // its removal (a crumbling sand block) is on the way: the spawn event can overtake the block update.
-            if (spawned > 0 && !level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()) {
-                sim.voxels().forceEmpty(pos.getX(), pos.getY(), pos.getZ());
-            }
+            spawnAt(sim, pos, payload.materialType(), payload.count(), payload.dirX(), payload.dirY(), payload.dirZ());
         }
     }
 

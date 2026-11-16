@@ -1,0 +1,6 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": ["minecraft:bucket", "minecraft:slime_block", "minecraft:redstone"],
+  "result": {"id": "fluidphysics:physics_slime_bucket", "count": 1}
+}

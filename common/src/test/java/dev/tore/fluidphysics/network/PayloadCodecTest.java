@@ -33,6 +33,25 @@ class PayloadCodecTest {
     }
 
     @Test
+    void syncPayloadSurvivesTheWire() {
+        FluidSyncPayload payload = new FluidSyncPayload(-3, 7, true,
+                new long[] {BlockPos.asLong(-40, 64, 120), BlockPos.asLong(-41, 64, 120)}, new byte[] {0, 3},
+                new short[] {64, 12});
+        ByteBuf buf = Unpooled.buffer();
+        FluidSyncPayload.STREAM_CODEC.encode(buf, payload);
+        assertEquals(2 * 11 + 11, buf.readableBytes());
+        FluidSyncPayload decoded = FluidSyncPayload.STREAM_CODEC.decode(buf);
+        assertEquals(0, buf.readableBytes());
+        assertEquals(-3, decoded.chunkX());
+        assertEquals(7, decoded.chunkZ());
+        assertEquals(true, decoded.full());
+        org.junit.jupiter.api.Assertions.assertArrayEquals(payload.blocks(), decoded.blocks());
+        org.junit.jupiter.api.Assertions.assertArrayEquals(payload.materials(), decoded.materials());
+        org.junit.jupiter.api.Assertions.assertArrayEquals(payload.counts(), decoded.counts());
+        assertEquals(76, decoded.total());
+    }
+
+    @Test
     void clearPayloadHasNoData() {
         assertEquals(0, roundTrip(FluidClearPayload.STREAM_CODEC, FluidClearPayload.INSTANCE));
     }

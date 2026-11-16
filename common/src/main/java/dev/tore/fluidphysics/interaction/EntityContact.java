@@ -283,6 +283,37 @@ public final class EntityContact {
         entity.setDeltaMovement(v[0], v[1], v[2]);
     }
 
+    /** Upward or downward speed change per tick of swimming in water particles, like vanilla's 0.04. */
+    static final double SWIM_ACCELERATION = 0.04;
+    /** Water share above which an entity can swim up. */
+    static final double SWIM_SHARE = 0.3;
+    /** Scratch for {@link #swim}, per side. */
+    private static final Sample SERVER_SWIM = new Sample();
+    private static final Sample CLIENT_SWIM = new Sample();
+
+    /**
+     * Swimming in water particles: jumping pushes up, sneaking (players) pushes down, as vanilla does in water blocks.
+     * Called at the end of {@code LivingEntity.aiStep} on the side that moves the entity.
+     */
+    public static void swim(LivingEntity entity, boolean jumping) {
+        boolean sneaking = entity instanceof net.minecraft.world.entity.player.Player && entity.isShiftKeyDown();
+        if ((!jumping && !sneaking) || entity.isSpectator() || entity.isInWater() || !movesHere(entity)) {
+            return;
+        }
+        FluidSimulation simulation = Simulations.forLevel(entity.level());
+        if (simulation == null || simulation.activeCount() == 0) {
+            return;
+        }
+        AABB box = entity.getBoundingBox();
+        Sample s = entity.level().isClientSide() ? CLIENT_SWIM : SERVER_SWIM;
+        if (!sample(simulation.occupancy(), box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ, s)
+                || s.submerged[ParticleSoA.MATERIAL_WATER] < SWIM_SHARE) {
+            return;
+        }
+        double dy = jumping ? SWIM_ACCELERATION : -SWIM_ACCELERATION;
+        entity.setDeltaMovement(entity.getDeltaMovement().add(0.0, dy, 0.0));
+    }
+
     /** Lava: sets the entity on fire for 15 seconds and hurts it, like a vanilla lava block. */
     private static void burn(Entity entity) {
         //? if >=1.21.11 {

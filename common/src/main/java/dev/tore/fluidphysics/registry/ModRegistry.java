@@ -2,6 +2,7 @@
 package dev.tore.fluidphysics.registry;
 
 import dev.tore.fluidphysics.FluidPhysicsCommon;
+import dev.tore.fluidphysics.block.PhysicsLightBlock;
 import dev.tore.fluidphysics.block.PhysicsSandBlock;
 import dev.tore.fluidphysics.item.PhysicsBucketItem;
 import dev.tore.fluidphysics.physics.ParticleSoA;
@@ -27,6 +28,7 @@ import net.minecraft.world.level.block.state.BlockBehaviour;
  */
 public final class ModRegistry {
     public static final Identifier PHYSICS_SAND_ID = FluidPhysicsCommon.id("physics_sand");
+    public static final Identifier PHYSICS_LIGHT_ID = FluidPhysicsCommon.id("physics_light");
     public static final Identifier WATER_BUCKET_ID = FluidPhysicsCommon.id("physics_water_bucket");
     public static final Identifier LAVA_BUCKET_ID = FluidPhysicsCommon.id("physics_lava_bucket");
     public static final Identifier SLIME_BUCKET_ID = FluidPhysicsCommon.id("physics_slime_bucket");
@@ -40,6 +42,7 @@ public final class ModRegistry {
             ResourceKey.create(Registries.CREATIVE_MODE_TAB, Identifier.withDefaultNamespace("natural_blocks"));
 
     private static Block physicsSand;
+    private static Block physicsLight;
     private static Item physicsSandItem;
     private static PhysicsBucketItem waterBucket;
     private static PhysicsBucketItem lavaBucket;
@@ -86,6 +89,15 @@ public final class ModRegistry {
         physicsSand = new PhysicsSandBlock(
                 blockProps(PHYSICS_SAND_ID, BlockBehaviour.Properties.ofFullCopy(Blocks.SAND).noLootTable()));
         registrar.accept(PHYSICS_SAND_ID, physicsSand);
+        BlockBehaviour.Properties lightProps = BlockBehaviour.Properties.of().air().replaceable().noLootTable()
+                .lightLevel(state -> 12);
+        //? if >=1.21.2 {
+        lightProps.noCollision();
+        //?} else {
+        /*lightProps.noCollission(); // Mojang's spelling before 1.21.2
+        *///?}
+        physicsLight = new PhysicsLightBlock(blockProps(PHYSICS_LIGHT_ID, lightProps));
+        registrar.accept(PHYSICS_LIGHT_ID, physicsLight);
     }
 
     /** Creates the items and hands each to {@code registrar}. Call once, after {@link #registerBlocks}. */
@@ -123,6 +135,11 @@ public final class ModRegistry {
         } else if (tab.equals(NATURAL_TAB)) {
             output.accept(new ItemStack(physicsSandItem));
         }
+    }
+
+    /** The invisible block that makes resting lava particles shine. */
+    public static Block physicsLight() {
+        return physicsLight;
     }
 
     public static Block physicsSand() {

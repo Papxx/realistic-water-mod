@@ -35,6 +35,8 @@ public final class ServerSimulations {
             new Reference2ObjectOpenHashMap<>();
     private static final Reference2ObjectOpenHashMap<ServerLevel, ServerInteractions> INTERACTIONS =
             new Reference2ObjectOpenHashMap<>();
+    private static final Reference2ObjectOpenHashMap<ServerLevel, ServerResync> RESYNCS =
+            new Reference2ObjectOpenHashMap<>();
     /** Floodgates per level, created when the first opening is reported (only while they are enabled). */
     private static final Reference2ObjectOpenHashMap<ServerLevel, ServerFloodgates> FLOODGATES =
             new Reference2ObjectOpenHashMap<>();
@@ -57,16 +59,36 @@ public final class ServerSimulations {
     /** Shared by all levels: they tick one after another on the server thread. */
     private static WorkerPool pool;
     private static int limit = DEFAULT_LIMIT;
+    /** The stored settings are read on first use after a server start. */
+    private static boolean configLoaded;
     /** Whether removed blocks turn the vanilla sources behind them into particles (Plan.md §7.3.3); off by default. */
     private static boolean floodgates;
 
     private ServerSimulations() {
     }
 
+    /** Reads the saved limit and floodgate setting once per server run. */
+    private static void ensureConfig() {
+        if (!configLoaded) {
+            configLoaded = true;
+            FluidConfig config = FluidConfig.load();
+            limit = Math.max(0, Math.min(config.limit, ParticleSoA.MAX_PARTICLES));
+            floodgates = config.floodgates;
+        }
+    }
+
+    private static void saveConfig() {
+        FluidConfig config = new FluidConfig();
+        config.limit = limit;
+        config.floodgates = floodgates;
+        config.save();
+    }
+
     /** The simulation of {@code level}, created on first use (it allocates no particle arrays until a spawn). */
     public static FluidSimulation get(ServerLevel level) {
         FluidSimulation simulation = SIMULATIONS.get(level);
         if (simulation == null) {
+            ensureConfig();
             if (pool == null) {
                 pool = new WorkerPool(WorkerPool.defaultSize());
             }
@@ -102,6 +124,7 @@ public final class ServerSimulations {
         if (simulation == null) {
             return;
         }
+        resync(level, simulation);
         ServerInteractions interactions = INTERACTIONS.get(level);
         // /tick freeze stops the level, so it stops the particles too.
         if (!level.tickRateManager().runsNormally()) {
@@ -120,6 +143,22 @@ public final class ServerSimulations {
             simulation.stats().addInteractions(System.nanoTime() - start,
                     AllocationMeter.currentThreadBytes() - allocatedBefore);
         }
+    }
+
+    /** Once a second: tells players who have particle chunks loaded how many particles are in them (Plan.md §6.3.3). */
+    private static void resync(ServerLevel level, FluidSimulation simulation) {
+        if (level.getGameTime() % 20 != 0) {
+            return;
+        }
+        ServerResync resync = RESYNCS.get(level);
+        if (simulation.activeCount() == 0 && resync == null) {
+            return;
+        }
+        if (resync == null) {
+            resync = new ServerResync(level);
+            RESYNCS.put(level, resync);
+        }
+        resync.run(simulation);
     }
 
     /** Lava particles cooling into stone that has not formed yet, in {@code level}. */
@@ -158,9 +197,11 @@ public final class ServerSimulations {
         SIMULATIONS.clear();
         INTERACTIONS.clear();
         FLOODGATES.clear();
+        RESYNCS.clear();
         FluidNetworking.sent().reset();
         limit = DEFAULT_LIMIT;
         floodgates = false;
+        configLoaded = false;
         if (pool != null) {
             pool.close();
             pool = null;
@@ -168,27 +209,33 @@ public final class ServerSimulations {
     }
 
     public static int limit() {
+        ensureConfig();
         return limit;
     }
 
-    /** Sets the particle limit of every level until the server stops, clamped to {@code 0..MAX_PARTICLES}. */
+    /** Sets the particle limit of every level (saved in config/fluidphysics.properties), clamped to {@code 0..MAX_PARTICLES}. */
     public static void setLimit(int newLimit) {
+        ensureConfig();
         limit = Math.max(0, Math.min(newLimit, ParticleSoA.MAX_PARTICLES));
+        saveConfig();
         for (FluidSimulation simulation : SIMULATIONS.values()) {
             simulation.setLimit(limit);
         }
     }
 
     public static boolean floodgatesEnabled() {
+        ensureConfig();
         return floodgates;
     }
 
     /**
-     * Turns the floodgates (Plan.md §7.3.3) on or off for every level until the server stops. Turning them off forgets
+     * Turns the floodgates (Plan.md §7.3.3) on or off for every level (saved in config/fluidphysics.properties). Turning them off forgets
      * the openings that were still waiting.
      */
     public static void setFloodgates(boolean enabled) {
+        ensureConfig();
         floodgates = enabled;
+        saveConfig();
         if (!enabled) {
             FLOODGATES.clear();
         }
@@ -205,6 +252,7 @@ public final class ServerSimulations {
      * stops holding vanilla water or lava back.
      */
     public static void beforeBlockChange(ServerLevel level, BlockPos pos, BlockState next) {
+        ensureConfig();
         if (!floodgates) {
             return;
         }

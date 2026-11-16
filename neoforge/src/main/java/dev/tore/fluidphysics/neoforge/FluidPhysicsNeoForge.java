@@ -8,6 +8,7 @@ import dev.tore.fluidphysics.network.FluidClearPayload;
 import dev.tore.fluidphysics.network.FluidCondensePayload;
 import dev.tore.fluidphysics.network.FluidImpulsePayload;
 import dev.tore.fluidphysics.network.FluidSpawnPayload;
+import dev.tore.fluidphysics.network.FluidSyncPayload;
 import dev.tore.fluidphysics.registry.ModRegistry;
 import dev.tore.fluidphysics.server.ServerSimulations;
 import net.minecraft.core.registries.Registries;
@@ -27,7 +28,7 @@ import net.neoforged.neoforge.registries.RegisterEvent;
 @Mod(FluidPhysicsCommon.MOD_ID)
 public final class FluidPhysicsNeoForge {
     /** Network protocol version; NeoForge refuses connections between different versions. */
-    private static final String PROTOCOL_VERSION = "1";
+    private static final String PROTOCOL_VERSION = "2";
 
     public FluidPhysicsNeoForge(IEventBus modBus) {
         FluidPhysicsCommon.init();
@@ -74,5 +75,7 @@ public final class FluidPhysicsNeoForge {
                 (payload, context) -> ClientSimulation.onCondense(payload));
         registrar.playToClient(FluidClearPayload.TYPE, FluidClearPayload.STREAM_CODEC,
                 (payload, context) -> ClientSimulation.onClear());
+        registrar.playToClient(FluidSyncPayload.TYPE, FluidSyncPayload.STREAM_CODEC,
+                (payload, context) -> ClientSimulation.onSync(payload));
     }
 }

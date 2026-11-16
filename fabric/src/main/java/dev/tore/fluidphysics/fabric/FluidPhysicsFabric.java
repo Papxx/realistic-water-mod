@@ -7,6 +7,7 @@ import dev.tore.fluidphysics.network.FluidClearPayload;
 import dev.tore.fluidphysics.network.FluidCondensePayload;
 import dev.tore.fluidphysics.network.FluidImpulsePayload;
 import dev.tore.fluidphysics.network.FluidSpawnPayload;
+import dev.tore.fluidphysics.network.FluidSyncPayload;
 import dev.tore.fluidphysics.registry.ModRegistry;
 import dev.tore.fluidphysics.server.ServerSimulations;
 import net.fabricmc.api.ModInitializer;
@@ -38,6 +39,7 @@ public final class FluidPhysicsFabric implements ModInitializer {
         PayloadTypeRegistry.playS2C().register(FluidImpulsePayload.TYPE, FluidImpulsePayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(FluidCondensePayload.TYPE, FluidCondensePayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(FluidClearPayload.TYPE, FluidClearPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(FluidSyncPayload.TYPE, FluidSyncPayload.STREAM_CODEC);
 
         CommandRegistrationCallback.EVENT.register(
                 (dispatcher, buildContext, selection) -> FluidPhysicsCommand.register(dispatcher));

@@ -1,4 +1,5 @@
 {
+  "block.fluidphysics.physics_light": "Lava Glow",
   "block.fluidphysics.physics_sand": "Crumbling Sand",
   "item.fluidphysics.physics_water_bucket": "Physics Water Bucket",
   "item.fluidphysics.physics_lava_bucket": "Physics Lava Bucket",

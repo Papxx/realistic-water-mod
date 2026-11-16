@@ -94,6 +94,8 @@ artifacts {
     val main = sourceSets.main.get()
     main.java.srcDirs.forEach { add(commonJava.name, it) { builtBy(generate) } }
     main.resources.srcDirs.forEach { add(commonResources.name, it) { builtBy(generate) } }
+    // Recipes differ between versions (1.21.2 changed the ingredient format), so each version has its own folder.
+    add(commonResources.name, file("recipes/${prop("minecraft_version")}"))
 }
 
 // Apache-2.0 §4: ship LICENSE and NOTICE in the root of every jar.

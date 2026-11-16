@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.tore.fluidphysics.platform;
 
+import java.nio.file.Path;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -15,6 +16,9 @@ public interface IPlatformHelper {
     boolean isModLoaded(String modId);
 
     boolean isDevelopmentEnvironment();
+
+    /** The loader's config directory. */
+    Path getConfigDir();
 
     /**
      * Sends a registered clientbound payload to one player. Players whose client can not receive it (no mod installed)

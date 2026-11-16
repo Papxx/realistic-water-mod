@@ -15,8 +15,9 @@ import net.minecraft.world.phys.Vec3;
  * height submerged. The particles' mean velocity at the corners drags the boat along, so a stream carries it.
  *
  * <p>Runs wherever the boat is simulated (the server, or the client of the player steering it), against that side's
- * own particles. The boat does not tilt yet: vanilla's boat renderer ignores pitch and roll, so showing the
- * difference between the corners needs a renderer hook per Minecraft version.
+ * own particles. The boat's tilt to the water surface is only drawn: {@link #tilt} fits a plane through the water
+ * heights at the four corners and the client's boat renderer rotates the model by it (vanilla's renderer ignores
+ * pitch and roll).
  */
 public final class BoatBuoyancy {
     /** Half the boat's length and width, at which the corners are sampled. */
@@ -83,6 +84,83 @@ public final class BoatBuoyancy {
         double vx = v.x + (flowX / flowSamples / 20.0 - v.x) * drag;
         double vz = v.z + (flowZ / flowSamples / 20.0 - v.z) * drag;
         boat.setDeltaMovement(vx, vy, vz);
+        return true;
+    }
+
+    /** Most the boat is drawn tilted, in radians (25 degrees). */
+    static final double MAX_TILT = Math.toRadians(25);
+
+    /** Water surface height at the four corners, NaN where a corner has no water. Scratch for {@link #tilt}. */
+    private static final double[] SURFACE = new double[4];
+
+    /**
+     * Fits a plane through the water surface under the boat's four corners and returns the rotation that turns the
+     * boat from level to that plane, for the renderer. Needs water at all four corners; a boat half out of the water
+     * is not tilted.
+     *
+     * @param out receives the rotation axis x and z (the axis is horizontal, y is 0) and the angle in radians
+     * @return whether the boat should be tilted
+     */
+    public static boolean tilt(Entity boat, FluidSimulation simulation, float[] out) {
+        if (simulation == null || simulation.activeCount() == 0) {
+            return false;
+        }
+        BlockOccupancy occupancy = simulation.occupancy();
+        double bottom = boat.getY();
+        float height = boat.getBbHeight();
+        float yaw = boat.getYRot() * Mth.DEG_TO_RAD;
+        double forwardX = -Mth.sin(yaw);
+        double forwardZ = Mth.cos(yaw);
+        double sumXX = 0;
+        double sumZZ = 0;
+        double mean = 0;
+        for (int corner = 0; corner < 4; corner++) {
+            double along = (corner & 1) == 0 ? HALF_LENGTH : -HALF_LENGTH;
+            double across = (corner & 2) == 0 ? HALF_WIDTH : -HALF_WIDTH;
+            double ox = forwardX * along - forwardZ * across;
+            double oz = forwardZ * along + forwardX * across;
+            double surface = Double.NaN;
+            int bx = Mth.floor(boat.getX() + ox);
+            int bz = Mth.floor(boat.getZ() + oz);
+            for (int by = Mth.floor(bottom + height); by >= Mth.floor(bottom) - 1; by--) {
+                int slot = occupancy.slotOf(bx, by, bz);
+                int water = slot < 0 ? 0 : occupancy.count(slot, ParticleSoA.MATERIAL_WATER);
+                if (water > 0) {
+                    surface = by + Math.min(1f, water / FULL_BLOCK);
+                    break;
+                }
+            }
+            if (Double.isNaN(surface)) {
+                return false;
+            }
+            SURFACE[corner] = surface;
+            mean += surface / 4.0;
+            sumXX += ox * ox;
+            sumZZ += oz * oz;
+        }
+        // Least squares plane h = mean + sx * ox + sz * oz; the corners are symmetric, so the offsets average to zero.
+        double sx = 0;
+        double sz = 0;
+        for (int corner = 0; corner < 4; corner++) {
+            double along = (corner & 1) == 0 ? HALF_LENGTH : -HALF_LENGTH;
+            double across = (corner & 2) == 0 ? HALF_WIDTH : -HALF_WIDTH;
+            double ox = forwardX * along - forwardZ * across;
+            double oz = forwardZ * along + forwardX * across;
+            sx += (SURFACE[corner] - mean) * ox;
+            sz += (SURFACE[corner] - mean) * oz;
+        }
+        sx /= sumXX;
+        sz /= sumZZ;
+        // Normal of the plane (-sx, 1, -sz); the axis that turns up onto it is up x normal.
+        double length = Math.sqrt(sx * sx + 1 + sz * sz);
+        double angle = Math.min(MAX_TILT, Math.acos(1.0 / length));
+        double axisLength = Math.hypot(sx, sz);
+        if (axisLength < 1e-6 || angle < 1e-3) {
+            return false;
+        }
+        out[0] = (float) (-sz / axisLength);
+        out[1] = (float) (sx / axisLength);
+        out[2] = (float) angle;
         return true;
     }
 }

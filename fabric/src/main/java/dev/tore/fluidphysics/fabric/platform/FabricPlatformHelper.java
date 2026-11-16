@@ -2,6 +2,7 @@
 package dev.tore.fluidphysics.fabric.platform;
 
 import dev.tore.fluidphysics.platform.IPlatformHelper;
+import java.nio.file.Path;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -21,6 +22,11 @@ public final class FabricPlatformHelper implements IPlatformHelper {
     @Override
     public boolean isDevelopmentEnvironment() {
         return FabricLoader.getInstance().isDevelopmentEnvironment();
+    }
+
+    @Override
+    public Path getConfigDir() {
+        return FabricLoader.getInstance().getConfigDir();
     }
 
     @Override

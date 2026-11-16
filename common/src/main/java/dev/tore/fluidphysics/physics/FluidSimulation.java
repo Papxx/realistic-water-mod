@@ -569,6 +569,20 @@ public final class FluidSimulation {
         }
     }
 
+    /** Number of particles in chunk {@code chunk} ({@link ChunkKeys}). */
+    public int countInChunk(long chunk) {
+        ParticleSoA p = particles;
+        int count = 0;
+        if (p != null) {
+            for (int i = 0; i < p.activeCount; i++) {
+                if (chunkOf(i) == chunk) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
     /**
      * Picks every particle in one of {@code chunks} ({@link ChunkKeys}) for the next
      * {@link #removeMarked}.

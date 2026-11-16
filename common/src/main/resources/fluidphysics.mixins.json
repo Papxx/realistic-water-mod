@@ -9,7 +9,11 @@
     "EntityMixin",
     "ExplosionMixin",
     "FallingBlockEntityMixin",
-    "LevelMixin"
+    "LevelMixin",
+    "LivingEntityMixin"
+  ],
+  "client": [
+    "BoatRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

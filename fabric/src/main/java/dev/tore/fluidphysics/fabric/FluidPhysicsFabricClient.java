@@ -9,6 +9,7 @@ import dev.tore.fluidphysics.network.FluidClearPayload;
 import dev.tore.fluidphysics.network.FluidCondensePayload;
 import dev.tore.fluidphysics.network.FluidImpulsePayload;
 import dev.tore.fluidphysics.network.FluidSpawnPayload;
+import dev.tore.fluidphysics.network.FluidSyncPayload;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
@@ -35,6 +36,8 @@ public final class FluidPhysicsFabricClient implements ClientModInitializer {
                 (payload, context) -> ClientSimulation.onCondense(payload));
         ClientPlayNetworking.registerGlobalReceiver(FluidClearPayload.TYPE,
                 (payload, context) -> ClientSimulation.onClear());
+        ClientPlayNetworking.registerGlobalReceiver(FluidSyncPayload.TYPE,
+                (payload, context) -> ClientSimulation.onSync(payload));
 
         ClientTickEvents.END_CLIENT_TICK.register(ClientSimulation::tick);
 

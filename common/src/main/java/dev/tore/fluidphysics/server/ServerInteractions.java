@@ -3,6 +3,7 @@ package dev.tore.fluidphysics.server;
 
 import dev.tore.fluidphysics.interaction.CauldronFilling;
 import dev.tore.fluidphysics.interaction.Condensation;
+import dev.tore.fluidphysics.interaction.LavaLight;
 import dev.tore.fluidphysics.interaction.FluidReactions;
 import dev.tore.fluidphysics.interaction.StoneFormation;
 import dev.tore.fluidphysics.item.PhysicsBucketItem;
@@ -200,6 +201,7 @@ final class ServerInteractions {
             if (simulation.activeCount() > 0) {
                 condensation.run(simulation, condenseWorld);
                 ServerSimulations.removeMarked(level, simulation);
+                LavaLight.place(level, simulation);
             }
         }
     }

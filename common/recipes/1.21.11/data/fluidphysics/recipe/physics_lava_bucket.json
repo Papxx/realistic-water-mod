@@ -1,0 +1,6 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": ["minecraft:lava_bucket", "minecraft:redstone"],
+  "result": {"id": "fluidphysics:physics_lava_bucket", "count": 1}
+}

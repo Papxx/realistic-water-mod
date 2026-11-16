@@ -1,0 +1,6 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "building",
+  "ingredients": ["fluidphysics:physics_sand"],
+  "result": {"id": "minecraft:sand", "count": 1}
+}

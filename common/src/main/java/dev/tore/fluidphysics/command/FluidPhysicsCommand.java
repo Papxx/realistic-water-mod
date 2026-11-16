@@ -173,7 +173,7 @@ public final class FluidPhysicsCommand {
 
     private static int setLimit(CommandSourceStack source, int max) {
         ServerSimulations.setLimit(max);
-        String message = "Particle limit set to " + max + " per dimension until the server stops"
+        String message = "Particle limit set to " + max + " per dimension and saved"
                 + (ServerSimulations.anyAboveLimit()
                 ? "; particles above it stay until they condense or are cleared" : "");
         source.sendSuccess(() -> Component.literal(message), true);
@@ -193,7 +193,7 @@ public final class FluidPhysicsCommand {
     private static int setFloodgates(CommandSourceStack source, boolean on) {
         ServerSimulations.setFloodgates(on);
         source.sendSuccess(() -> Component.literal("Floodgates " + (on ? "on" : "off")
-                + " in every dimension until the server stops"), true);
+                + " in every dimension and saved"), true);
         return on ? 1 : 0;
     }
 
