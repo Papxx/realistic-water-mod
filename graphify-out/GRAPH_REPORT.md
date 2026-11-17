@@ -1,298 +1,366 @@
 # Graph Report - realistic-water-mod  (2026-11-17)
 
 ## Corpus Check
-- 133 files · ~78,318 words
+- 144 files · ~113,813 words
 - Verdict: corpus is large enough that graph structure adds value.
-- Unclassified: 12 file(s) not represented in the graph (top: .properties 4, (none) 3, .IPlatformHelper 2)
 
 ## Summary
-- 1261 nodes · 3683 edges · 70 communities (41 shown, 29 thin omitted)
-- Extraction: 83% EXTRACTED · 17% INFERRED · 0% AMBIGUOUS · INFERRED: 616 edges (avg confidence: 0.8)
-- Token cost: 0 input · 0 output
+- 1577 nodes · 4573 edges · 83 communities (55 shown, 28 thin omitted)
+- Extraction: 83% EXTRACTED · 17% INFERRED · 0% AMBIGUOUS · INFERRED: 778 edges (avg confidence: 0.8)
+- Token cost: 28,000 input · 7,000 output
 
 ## Community Hubs (Navigation)
-- Condensation & Particle Lifecycle
-- Particle Meshing & Block Environment
-- Bucket Pickup & Raycast
-- Docs, Plan & Perf Baseline
-- Cauldron Filling
-- Stone Formation (Obsidian)
-- Mixins: Boats, Buckets, Splash
-- Client Simulation & Events
-- Boat Buoyancy & Cluster Condense
-- PBF Solver Core
-- Material Properties & Mesher Tests
-- Test Fixtures & Voxel Setup
-- Simulation Stats Reporting
-- Physics Sand Block
-- Common Init & Payload Codecs
-- Floodgates
-- Solver Benchmark (JMH)
-- Entity Contact
-- Commands & Networking
-- Render Block Cache
-- Platform Helper Services
-- Reactions & Feature Classes
-- Network Stats
-- Spawn/Condense Payloads
-- Boat Tilt Rendering
-- Fluidphysics Command
-- ChunkVoxelCache
-- Command Tests
-- Collision Class & Mesher Stats Tests
-- Server Interactions & Cauldron Cache
-- Physics Light Block
-- Config & Service Loading
-- Client Stats Command
-- Server Floodgates & Pour
-- Explosion Push & Simulations
-- Texture Generator Script
-- Forced Condensation
-- Spatial Hash Grid
-- Server Resync
-- Statistics Helpers
-- Fabric Client Hooks
-- Solver Worker Pool
-- Particle Batch Renderer
-- Chunk Keys & Guard
-- NeoForge Client
-- Registry & Particle Tickets
-- Fabric Entrypoint
-- Fluid Config Persistence
-- Impulse Payload & Net Stats Test
-- Payload Codec Tests
-- Solver Substep Tasks
-- Pool Close Helpers
-- Entity Contact Tests
-- Material Properties
-- Allocation Meter Tests
-- Voxel Cache Tests
-- Fabric Platform Helper
-- Stats Report
-- Gradle Wrapper
-- Sand Texture
-- Lava Bucket Texture
-- Slime Bucket Texture
-- Water Bucket Texture
-- Water+Lava Reaction
+- FluidDensityField / .addToBin()
+- arraylist / assertequals
+- BlockEnvironment / .packedLight()
+- StatsReport.java / StatsReport
+- BoatBuoyancy / .apply()
+- Exception / fractions
+- SmoothFluidRenderer.java / GlossyLook
+- blockhitresult / clipcontext
+- .removeOutsideLoadedChunks() / .markRestInCluster()
+- at / .swim()
+- .clear() / .activeCount()
+- com.mojang.serialization.MapCodec / PhysicsLightBlock.java
+- PbfSolver / .applyCorrectionsAndCollide()
+- IPlatformHelper.java / IPlatformHelper
+- .pack() / ChunkVoxelCache.java
+- blockbehaviour / blockitem
+- SolverStepBenchmark.java / SolverStepBenchmark
+- Floodgates / .dequeue()
+- abstractboat / blockpos
+- bytebufcodecs / FluidPhysicsCommon.java
+- CauldronFilling / .accepts()
+- ForcedCondensation / .collectCandidates()
+- .networkLine() / Type
+- MarchingCubesTablesTest / .checkField()
+- buildcreativemodetabcontentsevent / clienttickevent
+- .add() / .jitter()
+- blockposargument / chunkpos
+- atomicinteger / .workerThreads()
+- PhysicsSandBlock.java / Override
+- ClientSimulation.java / ClientSimulation
+- com.mojang.blaze3d.vertex.PoseStack / BoatTilt.java
+- .x() / .z()
+- .forceEmpty() / .getMask()
+- .removeMarked() / FunctionalInterface
+- arrays / cell_size
+- .renderLines() / ParticleBatchRenderer
+- .sendToLevel() / .sendToTracking()
+- .buildNeighbors() / .computeCells()
+- BlockCache / .begin()
+- ClientConfig.java / Services.java
+- .clear() / .clear()
+- os / pil
+- abstractcauldronblock / blocks
+- ClientConfig / .ClientConfig()
+- FluidPhysicsCommand / .clear()
+- Grid Fixed Cost (65536 buckets) / Solver Phase Timing Breakdown (neighbours 33%, density 41%)
+- clientcommandregistrationcallback / clientplaynetworking
+- Placer / .place()
+- biconsumer / com.mojang.brigadier.CommandDispatcher
+- .clear() / FluidConfig
+- FluidSpawnPayload / .type()
+- ChunkKeys.java / ChunkKeys
+- .ofBlock() / MutableBlockPos
+- builtinregistries / commandregistrationcallback
+- com.mojang.blaze3d.vertex.BufferBuilder / .beginBuffer()
+- FluidReactions / .cell()
+- EntityContactTest / .aBoxFarFromAllParticlesTouchesNothing()
+- Floodgates / FluidClearPayload
+- biomecolors / camera
+- .advance() / .applyWakes()
+- FluidSyncPayload / .read()
+- ChunkVoxelCache / Render interpolation with DeltaTracker partial tick
+- FluidReactionsTest / .particlesReactWithVanillaFluids()
+- Step 6a Solver Performance Baseline / Plan.md
+- Boat class hierarchy (Boat vs AbstractBoat) / BoatMixin (buoyancy)
+- FluidReactions (lava and water reaction) / Lava (material 1)
+- CubeFilter / .test()
+- Condensation (re-blockification) / ForcedCondensation
+- gradlew / gradlew script
+- MarchingCubesTables.java / MarchingCubesTables
+- Physics Sand Block Texture (pale yellow-beige speckled 16x16 sand tile) / MATERIAL_SAND granular particle material
+- Physics Lava Bucket Texture (16x16 bucket item icon) / Lava Material (MATERIAL_LAVA)
+- Physics Slime Bucket Texture (16x16 bucket with green slime) / Slime material (MATERIAL_SLIME)
+- Physics Water Bucket texture (pixel-art bucket with water) / Water material (MATERIAL_WATER)
+- MutableBlockPos
+- Physics Buckets and Physics Sand Items
+- vector3fc
 
 ## God Nodes (most connected - your core abstractions)
-1. `FluidSimulation` - 128 edges
-2. `ParticleSoA` - 62 edges
-3. `PbfSolver` - 55 edges
-4. `ChunkVoxelCache` - 46 edges
-5. `ServerSimulations` - 45 edges
-6. `ParticleMesher` - 36 edges
-7. `WorkerPool` - 33 edges
-8. `BlockOccupancy` - 31 edges
-9. `RollingSamples` - 26 edges
-10. `ParticleMesherTest` - 25 edges
+1. `FluidSimulation` - 126 edges
+2. `ParticleSoA` - 58 edges
+3. `PbfSolver` - 54 edges
+4. `FluidDensityField` - 54 edges
+5. `ChunkVoxelCache` - 46 edges
+6. `ServerSimulations` - 45 edges
+7. `ParticleBatchRenderer` - 41 edges
+8. `MarchingCubesMesher` - 37 edges
+9. `ParticleMesher` - 37 edges
+10. `WorkerPool` - 33 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `FabricPlatformHelper` --implements--> `IPlatformHelper`  [EXTRACTED]
-  fabric/src/main/java/dev/tore/fluidphysics/fabric/platform/FabricPlatformHelper.java → common/src/main/java/dev/tore/fluidphysics/platform/IPlatformHelper.java
-- `CLAUDE.md Project Instructions` --references--> `IPlatformHelper (ServiceLoader platform pattern)`  [EXTRACTED]
-  CLAUDE.md → Plan.md
 - `/fluidphysics Commands` --references--> `ServerSimulations`  [INFERRED]
   README.md → Plan.md
-- `NeoForgePlatformHelper` --implements--> `IPlatformHelper`  [EXTRACTED]
-  neoforge/src/main/java/dev/tore/fluidphysics/neoforge/platform/NeoForgePlatformHelper.java → common/src/main/java/dev/tore/fluidphysics/platform/IPlatformHelper.java
-- `CLAUDE.md Project Instructions` --references--> `Plan.md Implementation Plan`  [EXTRACTED]
+- `Solver Phase Timing Breakdown (neighbours 33%, density 41%)` --references--> `PbfSolver`  [EXTRACTED]
+  docs/perf/step-6a-baseline.md → Plan.md
+- `CLAUDE.md Project Instructions` --references--> `ChunkVoxelCache`  [EXTRACTED]
   CLAUDE.md → Plan.md
+- `Zero Heap Allocation / No Entity per Particle Rule` --rationale_for--> `ParticleSoA`  [EXTRACTED]
+  CLAUDE.md → Plan.md
+- `FabricPlatformHelper` --implements--> `IPlatformHelper`  [EXTRACTED]
+  fabric/src/main/java/dev/tore/fluidphysics/fabric/platform/FabricPlatformHelper.java → common/src/main/java/dev/tore/fluidphysics/platform/IPlatformHelper.java
 
 ## Import Cycles
 - None detected.
 
 ## Hyperedges (group relationships)
-- **Physics Core Pipeline (SoA, grid, voxel cache, solver)** — realistic_water_mod_plan_particlesoa, realistic_water_mod_plan_spatialhashgrid, realistic_water_mod_plan_chunkvoxelcache, realistic_water_mod_plan_pbfsolver [EXTRACTED 0.95]
-- **Event-based multiplayer sync** — realistic_water_mod_plan_serversimulations, realistic_water_mod_plan_networking_payloads, realistic_water_mod_plan_clientsimulation, realistic_water_mod_claude_event_coarse_sync [EXTRACTED 0.95]
-- **Step 8 smooth iso-surface rendering pipeline** — realistic_water_mod_plan_fluiddensityfield, realistic_water_mod_plan_marchingcubesmesher, realistic_water_mod_plan_smoothfluidrenderer [EXTRACTED 0.95]
+- **Core physics pipeline** — realistic_water_mod_plan_pbfsolver, realistic_water_mod_plan_particlesoa, realistic_water_mod_plan_spatialhashgrid, realistic_water_mod_plan_chunkvoxelcache [INFERRED 0.75]
+- **Smooth surface render pipeline** — realistic_water_mod_plan_particlebatchrenderer, realistic_water_mod_plan_particlemesher, realistic_water_mod_plan_fluiddensityfield, realistic_water_mod_plan_marchingcubesmesher, realistic_water_mod_plan_marchingcubestables, realistic_water_mod_plan_smoothfluidrenderer [INFERRED 0.85]
+- **Entity and world effects on particles** — realistic_water_mod_plan_boatmixin, realistic_water_mod_plan_fallingblockentitymixin, realistic_water_mod_plan_explosionmixin, realistic_water_mod_plan_entitycontact [INFERRED 0.75]
 
-## Communities (70 total, 29 thin omitted)
+## Communities (83 total, 28 thin omitted)
 
-### Community 0 - "Condensation & Particle Lifecycle"
+### Community 0 - "FluidDensityField / .addToBin()"
+Cohesion: 0.05
+Nodes (9): FluidDensityField, MarchingCubesMesher, FluidDensityFieldTest, MarchingCubesMesherTest, MeshReport, Position, Scene, Snapshot (+1 more)
+
+### Community 1 - "arraylist / assertequals"
 Cohesion: 0.06
-Nodes (15): Condensation, FunctionalInterface, RemovalSink, CondensationTest, FakeWorld, Override, FluidReactionsTest, Override (+7 more)
+Nodes (44): arraylist, assertequals, assertfalse, assertnotequals, assertnotnull, assertnull, asserttrue, assumetrue (+36 more)
 
-### Community 1 - "Particle Meshing & Block Environment"
+### Community 2 - "BlockEnvironment / .packedLight()"
 Cohesion: 0.09
 Nodes (7): BlockEnvironment, ParticleMesher, VertexSink, Override, ParticleMesherTest, Recorder, VertexCounter
 
-### Community 2 - "Bucket Pickup & Raycast"
+### Community 3 - "StatsReport.java / StatsReport"
 Cohesion: 0.07
-Nodes (25): blockhitresult, clipcontext, ParticlePickup, Override, PhysicsBucketItem, TicketType, ModRegistry, Override (+17 more)
+Nodes (9): StatsReport, AllocationMeter, HotSpot, RollingSamples, SimulationStats, StatsReportTest, AllocationMeterTest, RollingSamplesTest (+1 more)
 
-### Community 3 - "Docs, Plan & Perf Baseline"
-Cohesion: 0.05
-Nodes (46): Step 6a Solver Performance Baseline, Grid Fixed Cost (65536 buckets), Solver Phase Timing Breakdown (neighbours 33%, density 41%), SolverStepBenchmark baseline results, CLAUDE.md Project Instructions, Clean-Room Policy and Apache-2.0 License, Event + Coarse Grid Sync (no per-particle network data), Zero Heap Allocation / No Entity per Particle Rule (+38 more)
-
-### Community 4 - "Cauldron Filling"
-Cohesion: 0.12
-Nodes (7): CauldronFilling, World, FluidReactions, Sink, CauldronFillingTest, FakeWorld, Override
-
-### Community 5 - "Stone Formation (Obsidian)"
+### Community 4 - "BoatBuoyancy / .apply()"
 Cohesion: 0.10
-Nodes (9): Placer, StoneFormation, World, ParticleChunkGuard, MutableBlockPos, World, ServerInteractions, StoneFormationTest (+1 more)
+Nodes (8): BoatBuoyancy, Condensation, World, EntityContact, Sample, FallingBlockSplash, BlockOccupancy, net.minecraft.world.entity.Entity
 
-### Community 6 - "Mixins: Boats, Buckets, Splash"
+### Community 5 - "Exception / fractions"
+Cohesion: 0.08
+Nodes (46): Exception, fractions, functools, sys, all_face_segments(), boundary_loops(), build_edges(), build_faces() (+38 more)
+
+### Community 6 - "SmoothFluidRenderer.java / GlossyLook"
+Cohesion: 0.13
+Nodes (6): GlossyLook, SmoothFluidRenderer, Override, Recorder, SmoothFluidRendererTest, VertexCounter
+
+### Community 7 - "blockhitresult / clipcontext"
+Cohesion: 0.11
+Nodes (20): blockhitresult, clipcontext, ParticlePickup, Override, PhysicsBucketItem, BucketItemMixin, gameevent, hitresult (+12 more)
+
+### Community 8 - ".removeOutsideLoadedChunks() / .markRestInCluster()"
+Cohesion: 0.11
+Nodes (3): FluidSimulation, World, ParticleChunkGuard
+
+### Community 9 - "at / .swim()"
 Cohesion: 0.12
-Nodes (21): at, FallingBlockSplash, BoatMixin, BucketItemMixin, ExplosionMixin, FallingBlockEntityMixin, LevelMixin, LivingEntityMixin (+13 more)
+Nodes (19): at, ExplosionPush, BoatMixin, EntityMixin, ExplosionMixin, FallingBlockEntityMixin, LivingEntityMixin, entity (+11 more)
 
-### Community 7 - "Client Simulation & Events"
+### Community 11 - "com.mojang.serialization.MapCodec / PhysicsLightBlock.java"
+Cohesion: 0.16
+Nodes (11): com.mojang.serialization.MapCodec, Override, PhysicsLightBlock, Simulations, LevelMixin, function, net.minecraft.core.BlockPos, net.minecraft.world.level.block.RenderShape (+3 more)
+
+### Community 13 - "IPlatformHelper.java / IPlatformHelper"
+Cohesion: 0.10
+Nodes (12): IPlatformHelper, FabricPlatformHelper, Override, fabricloader, fmlloader, fmlpaths, modlist, Override (+4 more)
+
+### Community 14 - ".pack() / ChunkVoxelCache.java"
+Cohesion: 0.11
+Nodes (12): ChunkVoxelCache, Column, MutableBlockPos, it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap, it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap, it.unimi.dsi.fastutil.objects.ObjectArrayList, it.unimi.dsi.fastutil.objects.Reference2LongOpenHashMap, levelchunksection (+4 more)
+
+### Community 15 - "blockbehaviour / blockitem"
 Cohesion: 0.15
-Nodes (5): ClientSimulation, FluidSimulation, Override, it.unimi.dsi.fastutil.longs.LongSet, net.minecraft.client.multiplayer.ClientLevel
+Nodes (13): blockbehaviour, blockitem, TicketType, ModRegistry, consumer, Override, net.minecraft.resources.Identifier, net.minecraft.resources.ResourceKey (+5 more)
 
-### Community 8 - "Boat Buoyancy & Cluster Condense"
-Cohesion: 0.15
-Nodes (3): BoatBuoyancy, World, BlockOccupancy
+### Community 16 - "SolverStepBenchmark.java / SolverStepBenchmark"
+Cohesion: 0.11
+Nodes (19): SolverStepBenchmark, iterationtype, level, locale, mode, org.openjdk.jmh.annotations.Benchmark, org.openjdk.jmh.annotations.BenchmarkMode, org.openjdk.jmh.annotations.Fork (+11 more)
 
-### Community 10 - "Material Properties & Mesher Tests"
-Cohesion: 0.19
-Nodes (16): arraylist, assertequals, assertfalse, assertnull, asserttrue, assumetrue, SpatialHashGridTest, hashset (+8 more)
-
-### Community 13 - "Physics Sand Block"
-Cohesion: 0.17
-Nodes (11): Override, PhysicsSandBlock, fallingblock, itemstack, net.minecraft.core.BlockPos, net.minecraft.core.Direction, net.minecraft.world.level.block.state.BlockState, net.minecraft.world.level.BlockGetter (+3 more)
-
-### Community 14 - "Common Init & Payload Codecs"
-Cohesion: 0.17
-Nodes (13): assertnotequals, bytebufcodecs, FluidPhysicsCommon, FluidStreamCodecs, FluidSyncPayload, Override, Type, io.netty.buffer.ByteBuf (+5 more)
-
-### Community 15 - "Floodgates"
+### Community 17 - "Floodgates / .dequeue()"
 Cohesion: 0.15
 Nodes (6): Floodgates, World, FakeWorld, FloodgatesTest, Override, it.unimi.dsi.fastutil.longs.LongArrayFIFOQueue
 
-### Community 16 - "Solver Benchmark (JMH)"
-Cohesion: 0.12
-Nodes (19): SolverStepBenchmark, iterationtype, level, locale, mode, org.openjdk.jmh.annotations.Benchmark, org.openjdk.jmh.annotations.BenchmarkMode, org.openjdk.jmh.annotations.Fork (+11 more)
+### Community 18 - "abstractboat / blockpos"
+Cohesion: 0.17
+Nodes (10): abstractboat, blockpos, ParticleSoA, it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap, it.unimi.dsi.fastutil.longs.LongArrayList, it.unimi.dsi.fastutil.longs.LongOpenHashSet, mth, net.minecraft.world.phys.AABB (+2 more)
 
-### Community 17 - "Entity Contact"
-Cohesion: 0.19
-Nodes (7): abstractboat, EntityContact, Sample, EntityMixin, net.minecraft.world.entity.Entity, net.minecraft.world.phys.AABB, soundevents
-
-### Community 18 - "Commands & Networking"
-Cohesion: 0.16
-Nodes (8): blockposargument, commands, FluidNetworking, ServerSimulations, integerargumenttype, literalargumentbuilder, net.minecraft.server.level.ServerLevel, predicate
-
-### Community 19 - "Render Block Cache"
-Cohesion: 0.14
-Nodes (6): com.mojang.blaze3d.vertex.BufferBuilder, BlockCache, BufferSink, MutableBlockPos, Override, ParticleBatchRenderer
-
-### Community 20 - "Platform Helper Services"
-Cohesion: 0.11
-Nodes (10): IPlatformHelper, fabricloader, fmlloader, fmlpaths, modlist, Override, NeoForgePlatformHelper, packetdistributor (+2 more)
-
-### Community 21 - "Reactions & Feature Classes"
-Cohesion: 0.20
-Nodes (8): blockpos, it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap, it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap, it.unimi.dsi.fastutil.longs.LongArrayList, it.unimi.dsi.fastutil.longs.LongOpenHashSet, iterator, longiterator, mth
-
-### Community 23 - "Spawn/Condense Payloads"
-Cohesion: 0.13
-Nodes (15): buildcreativemodetabcontentsevent, FluidCondensePayload, Override, Type, FluidSpawnPayload, Override, Type, leveltickevent (+7 more)
-
-### Community 24 - "Boat Tilt Rendering"
-Cohesion: 0.22
-Nodes (10): com.mojang.blaze3d.vertex.PoseStack, BoatTilt, BoatRendererMixin, java.util.WeakHashMap, net.minecraft.client.renderer.entity.AbstractBoatRenderer, net.minecraft.client.renderer.entity.state.BoatRenderState, net.minecraft.client.renderer.state.CameraRenderState, net.minecraft.client.renderer.SubmitNodeCollector (+2 more)
-
-### Community 26 - "ChunkVoxelCache"
-Cohesion: 0.16
-Nodes (4): ChunkVoxelCache, Column, MutableBlockPos, net.minecraft.world.level.chunk.LevelChunk
-
-### Community 27 - "Command Tests"
-Cohesion: 0.14
-Nodes (12): assertnotnull, bootstrap, collectors, com.mojang.brigadier.tree.CommandNode, commanddispatcher, FluidPhysicsCommandTest, emptyblockgetter, liquidblock (+4 more)
-
-### Community 28 - "Collision Class & Mesher Stats Tests"
-Cohesion: 0.14
-Nodes (9): arrays, cohesion, collision_class, SimulationTesting, granular, gravity, restitution, viscosity (+1 more)
-
-### Community 29 - "Server Interactions & Cauldron Cache"
-Cohesion: 0.14
-Nodes (14): abstractcauldronblock, blockstate, fluids, fluidstate, it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap, it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap, it.unimi.dsi.fastutil.objects.ObjectArrayList, it.unimi.dsi.fastutil.objects.Reference2LongOpenHashMap (+6 more)
-
-### Community 30 - "Physics Light Block"
-Cohesion: 0.19
-Nodes (8): blockbehaviour, com.mojang.serialization.MapCodec, Override, PhysicsLightBlock, MutableBlockPos, LavaLight, net.minecraft.util.RandomSource, net.minecraft.world.level.block.RenderShape
-
-### Community 31 - "Config & Service Loading"
-Cohesion: 0.14
-Nodes (10): chunkpos, Services, files, inputstream, ioexception, outputstream, properties, sectionpos (+2 more)
-
-### Community 32 - "Client Stats Command"
+### Community 19 - "bytebufcodecs / FluidPhysicsCommon.java"
 Cohesion: 0.18
-Nodes (6): com.mojang.brigadier.CommandDispatcher, ClientStatsCommand, AllocationMeter, HotSpot, net.minecraft.network.chat.Component, ThreadMXBean
+Nodes (14): bytebufcodecs, FluidPhysicsCommon, FluidClearPayload, Override, Type, FluidImpulsePayload, Override, Type (+6 more)
 
-### Community 33 - "Server Floodgates & Pour"
+### Community 20 - "CauldronFilling / .accepts()"
+Cohesion: 0.18
+Nodes (5): CauldronFilling, World, CauldronFillingTest, FakeWorld, Override
+
+### Community 21 - "ForcedCondensation / .collectCandidates()"
+Cohesion: 0.18
+Nodes (5): ForcedCondensation, FakeWorld, ForcedCondensationTest, Override, it.unimi.dsi.fastutil.longs.LongSet
+
+### Community 22 - ".networkLine() / Type"
 Cohesion: 0.21
+Nodes (3): Type, NetworkStats, NetworkStatsTest
+
+### Community 24 - "buildcreativemodetabcontentsevent / clienttickevent"
+Cohesion: 0.10
+Nodes (18): buildcreativemodetabcontentsevent, clienttickevent, dist, leveltickevent, minecraft, neoforge, FluidPhysicsNeoForge, FluidPhysicsNeoForgeClient (+10 more)
+
+### Community 26 - "blockposargument / chunkpos"
+Cohesion: 0.11
+Nodes (9): blockposargument, chunkpos, commands, FluidNetworking, MaterialProperties, integerargumenttype, predicate, sectionpos (+1 more)
+
+### Community 27 - "atomicinteger / .workerThreads()"
+Cohesion: 0.19
+Nodes (5): atomicinteger, FunctionalInterface, RangeTask, WorkerPool, locksupport
+
+### Community 28 - "PhysicsSandBlock.java / Override"
+Cohesion: 0.21
+Nodes (8): Override, PhysicsSandBlock, fallingblock, net.minecraft.core.Direction, net.minecraft.util.RandomSource, net.minecraft.world.level.Explosion, net.minecraft.world.level.LevelReader, net.minecraft.world.level.ScheduledTickAccess
+
+### Community 29 - "ClientSimulation.java / ClientSimulation"
+Cohesion: 0.23
+Nodes (3): ClientSimulation, Override, net.minecraft.client.multiplayer.ClientLevel
+
+### Community 30 - "com.mojang.blaze3d.vertex.PoseStack / BoatTilt.java"
+Cohesion: 0.24
+Nodes (9): com.mojang.blaze3d.vertex.PoseStack, BoatTilt, BoatRendererMixin, java.util.WeakHashMap, net.minecraft.client.renderer.entity.AbstractBoatRenderer, net.minecraft.client.renderer.entity.state.BoatRenderState, net.minecraft.client.renderer.state.CameraRenderState, net.minecraft.client.renderer.SubmitNodeCollector (+1 more)
+
+### Community 31 - ".x() / .z()"
+Cohesion: 0.17
+Nodes (4): ParticleTickets, ServerResync, it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap, net.minecraft.server.level.TicketType
+
+### Community 33 - ".removeMarked() / FunctionalInterface"
+Cohesion: 0.24
+Nodes (5): FunctionalInterface, RemovalSink, CondensationTest, FakeWorld, Override
+
+### Community 34 - "arrays / cell_size"
+Cohesion: 0.12
+Nodes (13): arrays, cell_size, cohesion, collision_class, granular, gravity, inv_cell_size, node_stride_y (+5 more)
+
+### Community 38 - "BlockCache / .begin()"
+Cohesion: 0.16
+Nodes (5): BlockCache, BufferSink, Override, MutableBlockPos, net.minecraft.client.Minecraft
+
+### Community 39 - "ClientConfig.java / Services.java"
+Cohesion: 0.22
+Nodes (8): Services, files, inputstream, ioexception, outputstream, path, properties, serviceloader
+
+### Community 40 - ".clear() / .clear()"
+Cohesion: 0.15
+Nodes (4): MutableBlockPos, World, ServerInteractions, Fluid
+
+### Community 41 - "os / pil"
+Cohesion: 0.22
+Nodes (13): os, pil, bucket(), clamp(), main(), physics_sand(), A metal bucket holding {contents}, with particle droplets of {droplet} hovering…, Generates the mod's 16x16 textures procedurally (clean-room: no external art).… (+5 more)
+
+### Community 42 - "abstractcauldronblock / blocks"
+Cohesion: 0.19
+Nodes (10): abstractcauldronblock, blocks, blockstate, MutableBlockPos, LavaLight, fluids, fluidstate, layeredcauldronblock (+2 more)
+
+### Community 43 - "ClientConfig / .ClientConfig()"
+Cohesion: 0.27
+Nodes (4): ClientConfig, RenderMode, CUBES, SMOOTH
+
+### Community 45 - "Grid Fixed Cost (65536 buckets) / Solver Phase Timing Breakdown (neighbours 33%, density 41%)"
+Cohesion: 0.19
+Nodes (13): Grid Fixed Cost (65536 buckets), Solver Phase Timing Breakdown (neighbours 33%, density 41%), SolverStepBenchmark baseline results, CLAUDE.md Project Instructions, Clean-Room Policy and Apache-2.0 License, Event + Coarse Grid Sync (no per-particle network data), Zero Heap Allocation / No Entity per Particle Rule, JMH SolverStepBenchmark (+5 more)
+
+### Community 46 - "clientcommandregistrationcallback / clientplaynetworking"
+Cohesion: 0.20
+Nodes (10): clientcommandregistrationcallback, clientplaynetworking, clienttickevents, FluidCondensePayload, Override, Type, FluidPhysicsFabricClient, fabricclientcommandsource (+2 more)
+
+### Community 47 - "Placer / .place()"
+Cohesion: 0.44
+Nodes (3): Placer, StoneFormation, StoneFormationTest
+
+### Community 48 - "biconsumer / com.mojang.brigadier.CommandDispatcher"
+Cohesion: 0.25
+Nodes (6): biconsumer, com.mojang.brigadier.CommandDispatcher, ClientStatsCommand, dev.tore.fluidphysics.physics.FluidSimulation, literalargumentbuilder, net.minecraft.network.chat.Component
+
+### Community 50 - "FluidSpawnPayload / .type()"
+Cohesion: 0.27
+Nodes (4): FluidSpawnPayload, Override, Type, PayloadCodecTest
+
+### Community 51 - "ChunkKeys.java / ChunkKeys"
+Cohesion: 0.24
+Nodes (5): ChunkKeys, it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap, iterator, java.util.function.LongConsumer, longiterator
+
+### Community 52 - ".ofBlock() / MutableBlockPos"
+Cohesion: 0.22
 Nodes (4): MutableBlockPos, Override, ServerFloodgates, World
 
-### Community 34 - "Explosion Push & Simulations"
-Cohesion: 0.19
-Nodes (5): ExplosionPush, Simulations, function, net.minecraft.world.level.Level, serverlevel
-
-### Community 35 - "Texture Generator Script"
-Cohesion: 0.20
-Nodes (14): os, pil, random, bucket(), clamp(), main(), physics_sand(), A metal bucket holding {contents}, with particle droplets of {droplet} hovering… (+6 more)
-
-### Community 38 - "Server Resync"
-Cohesion: 0.24
-Nodes (3): ServerResync, it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap, net.minecraft.server.level.ServerPlayer
-
-### Community 40 - "Fabric Client Hooks"
-Cohesion: 0.20
-Nodes (10): clientcommandregistrationcallback, clientplaynetworking, clienttickevents, FluidClearPayload, Override, Type, FluidPhysicsFabricClient, fabricclientcommandsource (+2 more)
-
-### Community 41 - "Solver Worker Pool"
-Cohesion: 0.25
-Nodes (3): atomicinteger, WorkerPool, locksupport
-
-### Community 42 - "Particle Batch Renderer"
-Cohesion: 0.18
-Nodes (10): biomecolors, camera, com.mojang.blaze3d.vertex.ByteBufferBuilder, hashcommon, lightlayer, lighttexture, meshdata, net.minecraft.client.renderer.rendertype.RenderType (+2 more)
-
-### Community 43 - "Chunk Keys & Guard"
-Cohesion: 0.27
-Nodes (4): blocks, ChunkKeys, java.util.function.LongConsumer, net.minecraft.client.Minecraft
-
-### Community 44 - "NeoForge Client"
-Cohesion: 0.20
-Nodes (9): clienttickevent, dist, minecraft, neoforge, FluidPhysicsNeoForge, FluidPhysicsNeoForgeClient, net.neoforged.fml.common.Mod, registerclientcommandsevent (+1 more)
-
-### Community 45 - "Registry & Particle Tickets"
-Cohesion: 0.24
-Nodes (6): biconsumer, blockitem, ParticleTickets, consumer, net.minecraft.server.level.TicketType, registries
-
-### Community 46 - "Fabric Entrypoint"
+### Community 53 - "builtinregistries / commandregistrationcallback"
 Cohesion: 0.22
 Nodes (9): builtinregistries, commandregistrationcallback, FluidPhysicsFabric, itemgroupevents, net.fabricmc.api.ModInitializer, payloadtyperegistry, registry, serverlifecycleevents (+1 more)
 
-### Community 48 - "Impulse Payload & Net Stats Test"
-Cohesion: 0.31
-Nodes (4): FluidImpulsePayload, Override, Type, NetworkStatsTest
+### Community 54 - "com.mojang.blaze3d.vertex.BufferBuilder / .beginBuffer()"
+Cohesion: 0.36
+Nodes (3): com.mojang.blaze3d.vertex.BufferBuilder, net.minecraft.client.renderer.rendertype.RenderType, org.joml.Vector3fc
 
-### Community 60 - "Gradle Wrapper"
+### Community 57 - "Floodgates / FluidClearPayload"
+Cohesion: 0.20
+Nodes (10): Floodgates, FluidClearPayload, FluidCondensePayload, FluidImpulsePayload, /fluidphysics command, FluidSpawnPayload, No per-particle network sync rule, ServerSimulations (+2 more)
+
+### Community 58 - "biomecolors / camera"
+Cohesion: 0.22
+Nodes (8): biomecolors, camera, com.mojang.blaze3d.vertex.ByteBufferBuilder, hashcommon, lightlayer, lighttexture, meshdata, rendertypes
+
+### Community 60 - "FluidSyncPayload / .read()"
+Cohesion: 0.32
+Nodes (3): FluidSyncPayload, Override, Type
+
+### Community 61 - "ChunkVoxelCache / Render interpolation with DeltaTracker partial tick"
+Cohesion: 0.32
+Nodes (8): ChunkVoxelCache, Render interpolation with DeltaTracker partial tick, FluidDensityField, MarchingCubesMesher, MarchingCubesTables, ParticleBatchRenderer, ParticleMesher, SmoothFluidRenderer
+
+### Community 63 - "FluidReactionsTest / .particlesReactWithVanillaFluids()"
+Cohesion: 0.43
+Nodes (3): FluidReactionsTest, Override, Recorder
+
+### Community 64 - "Step 6a Solver Performance Baseline / Plan.md"
+Cohesion: 0.33
+Nodes (5): Step 6a Solver Performance Baseline, Identifier vs ResourceLocation rename, ModRegistry (itemProps / blockProps), setId requirement from 1.21.2, Stonecutter build layout
+
+### Community 66 - "Boat class hierarchy (Boat vs AbstractBoat) / BoatMixin (buoyancy)"
+Cohesion: 0.40
+Nodes (6): Boat class hierarchy (Boat vs AbstractBoat), BoatMixin (buoyancy), EntityContact, ExplosionMixin, FallingBlockEntityMixin, FluidSimulation
+
+### Community 67 - "FluidReactions (lava and water reaction) / Lava (material 1)"
+Cohesion: 0.40
+Nodes (6): FluidReactions (lava and water reaction), Lava (material 1), Material Behavior Matrix, Sand (material 3), Slime (material 2), Water (material 0)
+
+### Community 69 - "Condensation (re-blockification) / ForcedCondensation"
+Cohesion: 0.40
+Nodes (5): Condensation (re-blockification), ForcedCondensation, 64-particle mass conservation rule, ParticleChunkGuard, ServerInteractions
+
+### Community 70 - "gradlew / gradlew script"
 Cohesion: 0.83
 Nodes (3): gradlew script, die(), warn()
 
 ## Knowledge Gaps
-- **27 isolated node(s):** `ModRegistry (itemProps/blockProps helpers)`, `IPlatformHelper (ServiceLoader platform pattern)`, `WorkerPool (fixed solver thread pool)`, `Material Behavior Matrix (Water/Lava/Slime/Sand)`, `Cauldron Filling` (+22 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 233 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **29 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **27 isolated node(s):** `Grid Fixed Cost (65536 buckets)`, `Solver Phase Timing Breakdown (neighbours 33%, density 41%)`, `SolverStepBenchmark baseline results`, `/fluidphysics Commands`, `Physics Buckets and Physics Sand Items` (+22 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 272 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **28 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `FluidSimulation` connect `Client Simulation & Events` to `Condensation & Particle Lifecycle`, `Bucket Pickup & Raycast`, `Cauldron Filling`, `Stone Formation (Obsidian)`, `Boat Buoyancy & Cluster Condense`, `PBF Solver Core`, `Material Properties & Mesher Tests`, `Simulation Stats Reporting`, `Physics Sand Block`, `Entity Contact`, `Commands & Networking`, `Reactions & Feature Classes`, `Spawn/Condense Payloads`, `ChunkVoxelCache`, `Collision Class & Mesher Stats Tests`, `Server Interactions & Cauldron Cache`, `Client Stats Command`, `Server Floodgates & Pour`, `Explosion Push & Simulations`, `Forced Condensation`, `Server Resync`, `Solver Worker Pool`, `Particle Batch Renderer`, `Chunk Keys & Guard`, `Entity Contact Tests`?**
-  _High betweenness centrality (0.272) - this node is a cross-community bridge._
-- **Why does `ParticleSoA` connect `Forced Condensation` to `Condensation & Particle Lifecycle`, `Particle Meshing & Block Environment`, `Bucket Pickup & Raycast`, `Cauldron Filling`, `Client Simulation & Events`, `Boat Buoyancy & Cluster Condense`, `PBF Solver Core`, `Material Properties & Mesher Tests`, `Test Fixtures & Voxel Setup`, `Physics Sand Block`, `Solver Benchmark (JMH)`, `Entity Contact`, `Commands & Networking`, `Reactions & Feature Classes`, `Spawn/Condense Payloads`, `ChunkVoxelCache`, `Collision Class & Mesher Stats Tests`, `Server Interactions & Cauldron Cache`, `Client Stats Command`, `Solver Worker Pool`, `Particle Batch Renderer`, `Chunk Keys & Guard`, `Registry & Particle Tickets`?**
-  _High betweenness centrality (0.120) - this node is a cross-community bridge._
-- **Why does `PbfSolver` connect `PBF Solver Core` to `Client Stats Command`, `Forced Condensation`, `Spatial Hash Grid`, `Client Simulation & Events`, `Solver Worker Pool`, `Material Properties & Mesher Tests`, `Test Fixtures & Voxel Setup`, `Simulation Stats Reporting`, `Solver Benchmark (JMH)`, `Solver Substep Tasks`, `ChunkVoxelCache`, `Solver Profiling Metrics`, `Collision Class & Mesher Stats Tests`?**
-  _High betweenness centrality (0.067) - this node is a cross-community bridge._
-- **What connects `ModRegistry (itemProps/blockProps helpers)`, `IPlatformHelper (ServiceLoader platform pattern)`, `WorkerPool (fixed solver thread pool)` to the rest of the system?**
+- **Why does `FluidSimulation` connect `.removeOutsideLoadedChunks() / .markRestInCluster()` to `arraylist / assertequals`, `StatsReport.java / StatsReport`, `BoatBuoyancy / .apply()`, `blockhitresult / clipcontext`, `.clear() / .activeCount()`, `com.mojang.serialization.MapCodec / PhysicsLightBlock.java`, `PbfSolver / .applyCorrectionsAndCollide()`, `.pack() / ChunkVoxelCache.java`, `abstractboat / blockpos`, `bytebufcodecs / FluidPhysicsCommon.java`, `CauldronFilling / .accepts()`, `ForcedCondensation / .collectCandidates()`, `blockposargument / chunkpos`, `atomicinteger / .workerThreads()`, `PhysicsSandBlock.java / Override`, `ClientSimulation.java / ClientSimulation`, `.x() / .z()`, `.removeMarked() / FunctionalInterface`, `arrays / cell_size`, `.sendToLevel() / .sendToTracking()`, `abstractcauldronblock / blocks`, `ChunkKeys.java / ChunkKeys`, `FluidReactions / .cell()`, `EntityContactTest / .aBoxFarFromAllParticlesTouchesNothing()`, `.advance() / .applyWakes()`, `.spawn() / .pourOnServer()`?**
+  _High betweenness centrality (0.186) - this node is a cross-community bridge._
+- **Why does `ParticleSoA` connect `abstractboat / blockpos` to `arraylist / assertequals`, `BlockEnvironment / .packedLight()`, `StatsReport.java / StatsReport`, `BoatBuoyancy / .apply()`, `blockhitresult / clipcontext`, `.removeOutsideLoadedChunks() / .markRestInCluster()`, `.clear() / .activeCount()`, `PbfSolver / .applyCorrectionsAndCollide()`, `.pack() / ChunkVoxelCache.java`, `blockbehaviour / blockitem`, `SolverStepBenchmark.java / SolverStepBenchmark`, `bytebufcodecs / FluidPhysicsCommon.java`, `ForcedCondensation / .collectCandidates()`, `.add() / .jitter()`, `blockposargument / chunkpos`, `PhysicsSandBlock.java / Override`, `ClientSimulation.java / ClientSimulation`, `arrays / cell_size`, `abstractcauldronblock / blocks`, `ChunkKeys.java / ChunkKeys`, `FluidReactions / .cell()`, `.advance() / .applyWakes()`?**
+  _High betweenness centrality (0.086) - this node is a cross-community bridge._
+- **Why does `ParticleBatchRenderer` connect `.renderLines() / ParticleBatchRenderer` to `FluidDensityField / .addToBin()`, `BlockEnvironment / .packedLight()`, `CubeFilter / .test()`, `BlockCache / .begin()`, `SmoothFluidRenderer.java / GlossyLook`, `ClientConfig / .ClientConfig()`, `clientcommandregistrationcallback / clientplaynetworking`, `biconsumer / com.mojang.brigadier.CommandDispatcher`, `com.mojang.blaze3d.vertex.BufferBuilder / .beginBuffer()`, `buildcreativemodetabcontentsevent / clienttickevent`, `biomecolors / camera`?**
+  _High betweenness centrality (0.079) - this node is a cross-community bridge._
+- **Are the 2 inferred relationships involving `FluidDensityField` (e.g. with `.emittingAllocatesNothingOnceGrown()` and `.meshOf()`) actually correct?**
+  _`FluidDensityField` has 2 INFERRED edges - model-reasoned connections that need verification._
+- **What connects `Grid Fixed Cost (65536 buckets)`, `Solver Phase Timing Breakdown (neighbours 33%, density 41%)`, `SolverStepBenchmark baseline results` to the rest of the system?**
   _27 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `Condensation & Particle Lifecycle` be split into smaller, more focused modules?**
-  _Cohesion score 0.06337222603523221 - nodes in this community are weakly interconnected._
-- **Should `Particle Meshing & Block Environment` be split into smaller, more focused modules?**
-  _Cohesion score 0.09265536723163842 - nodes in this community are weakly interconnected._
-- **Should `Bucket Pickup & Raycast` be split into smaller, more focused modules?**
-  _Cohesion score 0.07477288609364081 - nodes in this community are weakly interconnected._
+- **Should `FluidDensityField / .addToBin()` be split into smaller, more focused modules?**
+  _Cohesion score 0.05229610314356077 - nodes in this community are weakly interconnected._
+- **Should `arraylist / assertequals` be split into smaller, more focused modules?**
+  _Cohesion score 0.05744888023369036 - nodes in this community are weakly interconnected._

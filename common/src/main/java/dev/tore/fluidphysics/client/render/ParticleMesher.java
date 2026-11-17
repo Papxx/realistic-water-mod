@@ -4,15 +4,17 @@ package dev.tore.fluidphysics.client.render;
 import dev.tore.fluidphysics.physics.ParticleSoA;
 import dev.tore.fluidphysics.physics.PbfSolver;
 import java.util.Arrays;
+import java.util.function.IntPredicate;
 
 /**
  * Turns the particles into camera-relative micro-cubes: render interpolation, culling, back-to-front sorting, the look
  * of each material and the box geometry. Plain Java without any rendering API, so it can be unit tested;
  * {@link ParticleBatchRenderer} feeds its output into a vertex buffer.
  *
- * <p>Each frame is meshed in two calls. {@link #prepare} interpolates every particle between its last two tick
- * positions, drops particles behind the camera and sorts the rest far to near. {@link #emit} then writes up to three
- * quads per particle: only the faces that point towards the camera, wound counter-clockwise as seen from it.
+ * <p>Each frame is meshed in two calls. {@link #prepare} interpolates every particle (or those an optional filter
+ * accepts) between its last two tick positions, drops particles behind the camera and sorts the rest far to near.
+ * {@link #emit} then writes up to three quads per particle: only the faces that point towards the camera, wound
+ * counter-clockwise as seen from it.
  *
  * <p>Sorting per particle (instead of the per-quad sort vanilla runs for translucent buffers) is what lets water and
  * slime be translucent: a cube is convex, so drawing whole cubes far to near and only their front faces blends
@@ -133,7 +135,7 @@ public final class ParticleMesher {
     private final float[] normalZ = new float[3];
 
     /**
-     * Interpolates, culls and sorts the particles for one frame.
+     * Interpolates, culls and sorts all particles for one frame.
      *
      * @param partialTick fraction of the current tick that has passed, 0..1
      * @param camX        camera position in world coordinates
@@ -142,6 +144,22 @@ public final class ParticleMesher {
      */
     public int prepare(ParticleSoA p, float partialTick, double camX, double camY, double camZ,
                        float fwdX, float fwdY, float fwdZ) {
+        return prepare(p, partialTick, camX, camY, camZ, fwdX, fwdY, fwdZ, null);
+    }
+
+    /**
+     * Interpolates, culls and sorts the particles {@code include} accepts for one frame. The smooth render mode uses
+     * this to draw only sand and the fluid particles the iso-surface had no room for as cubes.
+     *
+     * @param partialTick fraction of the current tick that has passed, 0..1
+     * @param camX        camera position in world coordinates
+     * @param fwdX        unit vector the camera looks along
+     * @param include     tested with each particle index; null draws every particle. Pass a long-lived object, not a
+     *                    lambda created per frame, to keep the frame allocation-free
+     * @return the number of particles {@link #emit} will draw
+     */
+    public int prepare(ParticleSoA p, float partialTick, double camX, double camY, double camZ,
+                       float fwdX, float fwdY, float fwdZ, IntPredicate include) {
         int n = p.activeCount;
         ensureCapacity(n);
         this.camX = camX;
@@ -154,6 +172,9 @@ public final class ParticleMesher {
         float t = partialTick;
         int count = 0;
         for (int i = 0; i < n; i++) {
+            if (include != null && !include.test(i)) {
+                continue;
+            }
             float x = p.prevX[i] + (p.posX[i] - p.prevX[i]) * t - cx;
             float y = p.prevY[i] + (p.posY[i] - p.prevY[i]) * t - cy;
             float z = p.prevZ[i] + (p.posZ[i] - p.prevZ[i]) * t - cz;
@@ -387,6 +408,16 @@ public final class ParticleMesher {
         float phase = (hash & 0xFFFF) / 65536f;
         float flicker = wave(timeTicks * LAVA_FLICKER_RATE + phase);
         float heat = clamp01(0.6f + 0.3f * smoothstep(0f, 3f, speed) + 0.1f * flicker - 0.6f * crust);
+        return lavaRamp(heat);
+    }
+
+    /**
+     * The lava temperature ramp, opaque: dark crust at {@code heat} 0, glowing orange at 0.5, yellow-white at 1. Shared
+     * with {@link SmoothFluidRenderer} so cubes and the smooth surface glow in the same colours.
+     *
+     * @param heat 0..1
+     */
+    static int lavaRamp(float heat) {
         float r;
         float g;
         float b;

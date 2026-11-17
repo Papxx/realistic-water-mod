@@ -448,7 +448,7 @@ Goal: water, lava and slime render as one connected, glossy liquid surface inste
   - **Fresnel:** `fresnel = 0.04f + 0.96f * pow(1.0f - max(dot(N, V), 0.0f), 4.0f)`; at grazing angles slightly raise brightness and opacity.
   - **Blinn-Phong specular (wet gloss):** `spec = pow(max(dot(N, H), 0.0f), 48.0f) * 0.85f`, added directly to R/G/B; alpha rises up to `0.96f` at highlights, so white highlights shine on wave crests and droplet edges.
 - **Materials:** smooth mesh for `WATER`, `LAVA` (glowing orange-yellow with a dark crust at cooler edges, `FULL_BRIGHT` lightmap) and `SLIME` (translucent emerald green, strong gloss). `SAND` keeps rendering as granular particles.
-- **Command:** `/fluidphysics rendermode <smooth|cubes>` (default `smooth`).
+- **Command:** `/fluidphysics rendermode <smooth|cubes>` (default `smooth`). *Implemented in Step 8 as `/fluidphysics_client rendermode [smooth|cubes]` (§8.4.3).*
 
 ### 8.4 Verified Facts & Implementation Notes (checked 2026-11-16)
 1. **Render type:** `RenderType.translucent()` exists in 1.21.1 but **not in 1.21.11** (checked in the NeoForge 21.11.48 sources: `rendertype.RenderTypes` only has `translucentMovingBlock()`, which samples the block atlas). The `text_background` type used by `ParticleBatchRenderer` since Step 4 exists in both versions (quads, position + colour + lightmap, alpha blending, back-face culling, depth test, lightmap and fog) and takes per-vertex colours unchanged; the `(v0, v1, v2, v2)` trick works with it as well. All shading in §8.3 is computed on the CPU per vertex, so the vertex format needs no normal or UV.
@@ -459,4 +459,43 @@ Goal: water, lava and slime render as one connected, glossy liquid surface inste
 6. **Cost:** with `R = 0.32` and `ds = 0.125` a particle touches about 125 nodes (about 4 million kernel evaluations per frame at 32,768 particles), and the field is rebuilt every frame. Measure with `/fluidphysics_client stats` and plan it together with Step 6c.
 
 ### 8.5 Execution
-- [ ] **Step 8 (Smooth surface):** Implement §8.1–8.3 with `FluidDensityField`, `MarchingCubesMesher`, `MarchingCubesTables` and `SmoothFluidRenderer`, plus the render-mode command. Add `MarchingCubesMesherTest`: a water puddle and a water stream produce valid, closed triangles and normalised normals (no `NaN`). Run `./gradlew test` and build all four targets (`1.21.1` and `1.21.11` for Fabric and NeoForge); fix every error until `BUILD SUCCESSFUL`.
+- [x] **Step 8 (Smooth surface):** Implement §8.1–8.3 with `FluidDensityField`, `MarchingCubesMesher`, `MarchingCubesTables` and `SmoothFluidRenderer`, plus the render-mode command. Add `MarchingCubesMesherTest`: a water puddle and a water stream produce valid, closed triangles and normalised normals (no `NaN`). Run `./gradlew test` and build all four targets (`1.21.1` and `1.21.11` for Fabric and NeoForge); fix every error until `BUILD SUCCESSFUL`.
+  - **Done (2026-11-17).**
+  - Tables (§8.4.4): `tools/generate_marching_cubes_tables.py` (standard library only, deterministic) generates `MarchingCubesTables.java` from first principles in its own numbering. Corner `c` sits at `(c & 1, (c >> 1) & 1, (c >> 2) & 1)`; edges are numbered by axis, each running from its lower corner. On every face the crossing points are joined into segments, with one fixed rule for ambiguous faces: inside corners stay separate. No complement symmetry is used. The oriented segments chain into loops. Each loop is triangulated without chords inside a face plane, choosing the triangulation best aligned with the loop. At most 5 triangles per config, wound counter-clockwise seen from outside. Before writing, the script checks every config. It checks all 12,288 cube pairs that share a face for matching segments. It checks 800 random grids for closed, consistently oriented surfaces with positive volume (cavity walls ≤ 0). `MarchingCubesTablesTest` repeats these checks in Java.
+  - Field (§8.1): `FluidDensityField` is built per material from the render-interpolated particles.
+    - Grid: world-aligned (origin-relative nodes at multiples of `0.125`). Sparse tiles of 16³ cells (2 x 2 x 2 blocks). Each tile stores nodes −1..17 per axis, so marching cubes and the central-difference gradients of a tile never read another tile.
+    - Splatting: particles are splatted in a fixed order, so shared nodes are bit-identical in every tile and the mesh is crack-free across tile borders.
+    - Kernel: `max(0, 1 − q)³` with `R = 0.32`. On solid ground (the material's collision class in `ChunkVoxelCache`) it is stretched to `1.35 R` in x/z and squashed to `0.65 R` in y. Only the floor is checked, not walls.
+    - Capacity: at most 1,024 tiles per material. A particle whose tiles do not fit is left out of the field entirely and drawn as a cube, so the surface stays closed.
+    - Coarse grid per tile (0.5 blocks, nodes −1..5) with three fields:
+      - a trilinear particle count, for the thickness (§8.4.5: count sampled 0.375 blocks inside along `−N`, a full block = 1);
+      - the impact of moving particles, pooled per block into one source each, for the ripple amplitude;
+      - the distance to the nearest source, for the ring phase and direction.
+    - Allocation-free once grown.
+  - Mesher (§8.2): `MarchingCubesMesher`, iso level `0.35` (node inside when value > iso).
+    - Vertices: edge vertices are deduplicated per tile through a stamped edge cache and always computed from the lower node, so vertices on tile borders match bit for bit. The edge parameter is clamped to [0.001, 0.999] against zero-area triangles.
+    - Normals: `−grad`, interpolated along the edge (never NaN).
+    - Ripples (water only): concentric rings moving outward (1.5 rings/s, 4 rings, amplitude 0.35) where the impact field is above 0.02 on upward-facing surfaces.
+    - Culling: tiles and triangles behind the camera and back faces are dropped before normals and shading.
+    - Sorting: radix sort on 16-bit centroid distances, far to near.
+  - Shading (§8.3): `SmoothFluidRenderer` shades each vertex once on the CPU.
+    - Water: Beer-Lambert blend `(1 − e^(−k t)) / (1 − e^(−k))` from RGB(38,198,208) at α 0.58 to RGB(6,102,115) at α 0.86. Fresnel as specified, raising brightness towards a pale sky colour and opacity. Blinn-Phong with exponent 48 and strength 0.85, alpha up to 0.96. Mild diffuse `0.7 + 0.3 N·L`, because the shader has no lighting.
+    - Slime: emerald green, specular exponent 96, strength 1.0.
+    - Lava: temperature ramp shared with the cubes, dark crust at thin edges, flicker, `FULL_BRIGHT`, opaque.
+    - Light: water and slime take it from the block at `p − 0.125 N` (against dark seams where the surface touches a solid block).
+    - Output: each triangle is written as the quad `(v0, v1, v2, v2)`.
+  - Renderer: `ParticleBatchRenderer` reads the mode each frame. Cubes mode works as before. Smooth mode:
+    - builds and meshes water, lava and slime and sorts all triangles together;
+    - draws the cubes first (sand plus fallback particles, through the new `ParticleMesher.prepare(..., IntPredicate)` overload) so opaque sand is in the depth buffer;
+    - then draws the surface in a second buffer on the same vertex memory, both with `text_background` (§8.4.1);
+    - keeps the field and mesher scratch (up to about 30 MB) only while smooth frames are drawn.
+  - Command (§8.4.3, *decision*): `/fluidphysics_client rendermode [smooth|cubes]`, a client subcommand next to `stats`. `ClientConfig` saves the mode in `config/fluidphysics-client.properties` (default `smooth`). `/fluidphysics_client stats` shows the mode, and in smooth mode tiles, triangles, fallback particles and the CPU time of field, meshing and shading.
+  - Verified:
+    - `./gradlew build`: all four targets, 133 tests per version. New tests for the tables (above), the field (brute-force kernel sums, identical shared nodes, wetting, overflow, impact and source distance, zero allocations), the mesher (puddle and stream across tile borders: closed and consistently oriented after welding by position, unit normals without NaN, positive volume; culling; zero allocations) and the shading (highlights, depth, Fresnel, lava, extreme inputs, `(v0, v1, v2, v2)` end to end, zero allocations).
+    - Single-thread timings from the unit tests (build + mesh + sort per frame): settled 8 x 8 x 8-block pool of 32,768 particles about 19 ms (216 tiles, 24.5k triangles); 16,384 particles about 10 ms; a 32k pool stirred at 2 blocks/s about 23–27 ms; 8,192 isolated moving droplets about 34–40 ms (164k triangles).
+  - Open:
+    - Not run in game yet: the look, the ripples and Iris/Sodium are unverified.
+    - Cost: the field build dominates (about 0.5 µs per particle on one thread). Splitting it across the `WorkerPool`, and reusing the field while every particle rests, belong to Step 6c (§8.4.6).
+    - Smooth water uses the plan's fixed turquoise instead of the biome tint.
+    - Translucent fallback cubes are drawn before the surface and can hide it (only when a material exceeds 1,024 tiles).
+    - Smooth frames still allocate the vanilla `BufferBuilder`/`MeshData` objects (as cubes mode does).
